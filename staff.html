@@ -2324,12 +2324,12 @@ KANA_GROUPS.forEach(g=>{
     location.href = 'index.html';
   }
 
-  // ⚙️ 設定画面へ移動
-  function goToSettings(){
+  // ⚙️ 設定画面へ移動（グローバルスコープに置く）
+  window.goToSettings = function(){
     const cur = document.getElementById('staffSelect');
     const nm = (cur && cur.value) || sessionStorage.getItem('staffName') || '';
     location.href = 'settings.html' + (nm ? '?name='+encodeURIComponent(nm) : '');
-  }
+  };
 
   const monthLbl=document.getElementById('staffMonthLabel');
   const ym=StaffApp.getViewYM().split('-');

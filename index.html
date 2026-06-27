@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>サクラシフト 内勤ログイン</title>
+<style>
+  :root{--mint:#A7E8C8;--mint-deep:#5FD0A0;--pink:#FFC9DD;--pink-deep:#FF9EC0;--text:#4A5560;--text2:#9CAAB5;--line:#E4F4EC;--shadow:rgba(95,208,160,.18);}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Maru Gothic ProN','Hiragino Sans','Noto Sans JP',sans-serif;
+    background:radial-gradient(circle at 15% 10%,#FFE4F0 0%,transparent 30%),radial-gradient(circle at 85% 15%,#DCF3FF 0%,transparent 28%),linear-gradient(170deg,#F0FBF4,#F6FBFF);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .card{background:#fff;border-radius:24px;padding:36px 30px;width:100%;max-width:380px;box-shadow:0 12px 48px var(--shadow);border:2px solid var(--line);}
+  .logo{width:56px;height:56px;border-radius:50% 50% 50% 18px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 16px;box-shadow:0 6px 20px rgba(95,208,160,.4);}
+  h1{text-align:center;font-size:20px;font-weight:800;margin-bottom:4px;color:var(--text);}
+  .sub{text-align:center;font-size:13px;color:var(--text2);margin-bottom:28px;}
+  .field{margin-bottom:16px;}
+  label{display:block;font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px;}
+  select,input{width:100%;padding:13px 16px;border-radius:14px;border:2px solid var(--line);font-family:inherit;font-size:15px;color:var(--text);background:#F8FBF9;transition:border .15s;}
+  select:focus,input:focus{outline:none;border-color:var(--mint-deep);}
+  .pw-wrap{position:relative;}
+  .pw-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:var(--text2);}
+  .btn{width:100%;padding:14px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;margin-top:8px;box-shadow:0 4px 16px rgba(95,208,160,.35);transition:transform .1s;}
+  .btn:active{transform:scale(.97);}
+  .err{color:#E05260;font-size:13px;font-weight:700;text-align:center;margin-top:10px;display:none;}
+  .loading{display:none;text-align:center;color:var(--text2);font-size:13px;margin-top:10px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid #D9F0E5;border-top-color:var(--mint-deep);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🌸</div>
+  <h1>サクラシフト</h1>
+  <div class="sub">内勤スタッフ ログイン</div>
+
+  <div class="field">
+    <label>スタッフ名</label>
+    <select id="staffSel">
+      <option value="">読み込み中…</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>パスワード</label>
+    <div class="pw-wrap">
+      <input type="password" id="pwInput" placeholder="共通パスワードを入力" autocomplete="current-password">
+      <button class="pw-toggle" onclick="togglePw()" tabindex="-1">👁</button>
+    </div>
+  </div>
+
+  <button class="btn" onclick="doLogin()">ログイン</button>
+  <div class="err" id="errMsg">パスワードが違います</div>
+  <div class="loading" id="loading"><span class="spinner"></span>確認中…</div>
+</div>
+
+<script>
+const GAS_URL='https://script.google.com/macros/s/AKfycbyvlg5JbvPsqxkdvztwRXYBqPkvWjknicwfm2ksTlIxIQ-7N1zd72cn09c6oSNIkIxw/exec';
+const TOKEN='sakura2025shift';
+
+async function sha256(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// マスタからスタッフ一覧と内勤PWハッシュを取得
+let staffPwHash=null;
+(async()=>{
+  try{
+    const qs=new URLSearchParams({token:TOKEN,action:'loadMaster',_t:Date.now()}).toString();
+    const res=await fetch(GAS_URL+'?'+qs);
+    const data=await res.json();
+    const master=data.master||{};
+    const staffList=master.staffList||[];
+    const staffPw=(master.settings&&master.settings.staffPw)||'';
+    staffPwHash=staffPw?await sha256(staffPw):null;
+    const sel=document.getElementById('staffSel');
+    sel.innerHTML='<option value="">選択してください</option>'+
+      staffList.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+  }catch(e){
+    document.getElementById('staffSel').innerHTML='<option value="">読み込みに失敗しました</option>';
+  }
+})();
+
+async function doLogin(){
+  const name=document.getElementById('staffSel').value;
+  const pw=document.getElementById('pwInput').value;
+  const err=document.getElementById('errMsg');
+  const loading=document.getElementById('loading');
+  err.style.display='none';
+
+  if(!name){err.textContent='スタッフ名を選択してください';err.style.display='block';return;}
+  if(!pw){err.textContent='パスワードを入力してください';err.style.display='block';return;}
+
+  loading.style.display='block';
+  const hash=await sha256(pw);
+  loading.style.display='none';
+
+  if(!staffPwHash){
+    // PWが未設定の場合は仮ログイン（設定画面で設定してもらう）
+    go(name);
+    return;
+  }
+  if(hash===staffPwHash){
+    go(name);
+  }else{
+    err.textContent='パスワードが違います';
+    err.style.display='block';
+    document.getElementById('pwInput').value='';
+    document.getElementById('pwInput').focus();
+  }
+}
+
+function go(name){
+  sessionStorage.setItem('staffName',name);
+  sessionStorage.setItem('staffAuth','1');
+  location.href='staff.html?name='+encodeURIComponent(name);
+}
+
+function togglePw(){
+  const inp=document.getElementById('pwInput');
+  inp.type=inp.type==='password'?'text':'password';
+}
+
+document.getElementById('pwInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter') doLogin();
+});
+</script>
+</body>
+</html>

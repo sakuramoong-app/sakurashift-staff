@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>サクラシフト 設定</title>
+<style>
+  :root{
+    --base:#F0FBF4;--card:#FFFFFF;
+    --mint:#A7E8C8;--mint-deep:#5FD0A0;
+    --pink:#FFC9DD;--pink-deep:#FF9EC0;
+    --lemon:#FFE9A8;--sky:#BDE3FF;
+    --text:#4A5560;--text2:#9CAAB5;--line:#E4F4EC;
+    --shadow:rgba(95,208,160,.14);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Maru Gothic ProN','Hiragino Sans','Noto Sans JP',sans-serif;
+    background:radial-gradient(circle at 12% 8%,#FFE4F0 0%,transparent 28%),radial-gradient(circle at 88% 12%,#DCF3FF 0%,transparent 26%),linear-gradient(170deg,#F0FBF4,#F6FBFF);
+    background-attachment:fixed;color:var(--text);line-height:1.6;min-height:100vh;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid #D9F0E5;border-top-color:var(--mint-deep);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:5px;}
+  .top{background:rgba(255,255,255,.9);backdrop-filter:blur(10px);padding:14px 22px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 16px var(--shadow);position:sticky;top:0;z-index:50;border-bottom:2px solid var(--line);}
+  .top-brand{display:flex;align-items:center;gap:10px;}
+  .top-logo{width:38px;height:38px;border-radius:50% 50% 50% 14px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 4px 12px rgba(95,208,160,.4);}
+  .top-name{font-size:16px;font-weight:800;letter-spacing:.05em;}
+  .top-sub{font-size:11.5px;color:var(--mint-deep);font-weight:700;}
+  .save-state{font-size:12px;font-weight:700;color:var(--text2);}
+  .wrap{max-width:680px;margin:0 auto;padding:18px;padding-bottom:90px;}
+  .card{background:#fff;border-radius:18px;padding:18px 20px;margin-bottom:16px;box-shadow:0 3px 14px var(--shadow);border:2px solid var(--line);}
+  .card-title{font-size:15px;font-weight:800;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;}
+  .acc-arrow{font-size:11px;color:var(--text2);transition:transform .2s;}
+  .card.open .acc-arrow{transform:rotate(0deg);}
+  .card:not(.open) .acc-arrow{transform:rotate(-90deg);}
+  .card:not(.open) .card-title{margin-bottom:0;}
+  .card:not(.open) .card-body{display:none;}
+  .card-title .ico{width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,#FFE0EC,#FFC9DD);display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .add-row{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+  .form-input{padding:10px 13px;border-radius:12px;border:2px solid var(--line);background:#F8FBF9;font-family:inherit;font-size:14px;color:var(--text);}
+  .form-input:focus{outline:none;border-color:var(--mint);}
+  .add-btn{padding:10px 18px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;}
+  .add-btn:active{transform:scale(.96);}
+  .cast-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:#F8FBF9;margin-bottom:7px;border:1.5px solid var(--line);}
+  .cast-row-name{flex:1;font-weight:700;font-size:14px;}
+  .pw-input{width:64px;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:14px;text-align:center;font-weight:700;letter-spacing:.1em;}
+  .del-btn{padding:6px 13px;border:1.5px solid #FFB9B9;border-radius:9px;background:#fff;color:#E0568A;font-weight:800;font-size:12px;cursor:pointer;font-family:inherit;}
+  .del-btn:active{transform:scale(.95);}
+  .color-input{width:38px;height:34px;border:2px solid var(--line);border-radius:9px;cursor:pointer;background:#fff;padding:2px;}
+  .staff-dot-big{width:18px;height:18px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px var(--line);flex-shrink:0;}
+  .cast-block{margin-bottom:7px;}
+  .exp-arrow{font-size:10px;color:var(--text2);margin-right:4px;}
+  .store-count{font-size:11px;color:var(--mint-deep);font-weight:700;background:#EAFBF2;border-radius:8px;padding:1px 8px;margin-left:6px;}
+  .store-panel{background:#F8FBF9;border:1.5px solid var(--line);border-top:none;border-radius:0 0 12px 12px;padding:12px;margin-top:-5px;}
+  .store-panel-title{font-size:12px;font-weight:800;color:var(--text2);margin-bottom:9px;}
+  .store-grid{display:flex;flex-wrap:wrap;gap:7px;}
+  .store-chip{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:99px;border:2px solid var(--line);background:#fff;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none;}
+  .store-chip input{display:none;}
+  .store-chip.on{background:linear-gradient(135deg,#EAFBF2,#D7F5E6);border-color:var(--mint-deep);color:var(--mint-deep);}
+  .store-chip.required{background:#FFF6DD;border-color:var(--lemon);color:#B5841A;cursor:not-allowed;}
+  .alias-panel{margin-top:12px;padding-top:11px;border-top:1.5px dashed var(--line);}
+  .alias-row{display:flex;align-items:center;gap:9px;margin-bottom:7px;}
+  .alias-label{font-size:12px;font-weight:800;color:var(--text2);min-width:90px;}
+  .alias-input{flex:1;max-width:200px;padding:7px 11px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:13px;color:var(--text);background:#fff;}
+  .alias-input:focus{outline:none;border-color:var(--mint);}
+  .empty-hint{text-align:center;color:var(--text2);font-size:13px;padding:20px 0;font-weight:600;}
+  .hint{font-size:11.5px;color:var(--text2);margin-top:4px;}
+  .notice-label{display:block;font-size:12.5px;font-weight:800;color:var(--text);margin-bottom:7px;}
+  .notice-area{width:100%;padding:11px 13px;border-radius:12px;border:2px solid var(--line);background:#F8FBF9;font-family:inherit;font-size:13.5px;color:var(--text);resize:vertical;min-height:60px;line-height:1.6;}
+  .notice-area:focus{outline:none;border-color:var(--mint);}
+  .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.6);backdrop-filter:blur(2px);z-index:9000;display:none;align-items:center;justify-content:center;}
+  .loading-overlay.show{display:flex;}
+  .loading-box{background:#fff;border-radius:20px;padding:26px 34px;box-shadow:0 10px 40px rgba(95,208,160,.25);text-align:center;border:2px solid var(--line);}
+  .loading-spin{width:38px;height:38px;border:4px solid #E4F4EC;border-top-color:var(--mint-deep);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;}
+  .loading-text{font-size:13px;font-weight:800;color:var(--mint-deep);}
+  .save-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 -3px 18px rgba(95,208,160,.18);border-top:2px solid var(--lemon);padding:12px 22px;display:none;align-items:center;justify-content:space-between;z-index:8000;gap:14px;}
+  .save-bar.show{display:flex;}
+  .save-bar-text{font-size:13px;font-weight:800;color:#B5841A;}
+  .save-bar-btn{padding:11px 26px;border:none;border-radius:13px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(95,208,160,.35);}
+  .save-bar-btn:active{transform:scale(.96);}
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(74,85,96,.95);color:#fff;padding:11px 18px;border-radius:14px;font-size:13px;font-weight:700;z-index:10000;opacity:0;transition:all .3s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .reset-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .reset-label{font-size:12px;font-weight:800;color:var(--text2);white-space:nowrap;}
+  .reset-btn{width:100%;padding:13px;border:none;border-radius:13px;background:linear-gradient(135deg,#FFBDB7,#FF8A80);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;}
+  .reset-btn:active{transform:scale(.97);}
+  .reset-result{margin-top:10px;font-size:12px;font-weight:700;color:var(--text2);min-height:16px;}
+  /* 営業時間 */
+  .biz-section-title{font-size:12px;font-weight:800;color:var(--text2);margin-bottom:8px;}
+  .biz-weekly{display:flex;flex-direction:column;gap:6px;margin-bottom:4px;}
+  .biz-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#F8FBF9;border-radius:10px;border:1.5px solid var(--line);}
+  .biz-dow{font-size:13px;font-weight:800;width:24px;text-align:center;flex-shrink:0;}
+  .biz-sel{padding:6px 8px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:12px;background:#fff;color:var(--text);}
+  .biz-add-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .tag-list{display:flex;flex-wrap:wrap;gap:6px;min-height:20px;}
+  .closed-tag{background:#FFE4E4;color:#C0392B;border:1.5px solid #FFBBBB;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px;}
+  .special-tag{background:#EEF3FF;color:#2255CC;border:1.5px solid #C0D0FF;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:5px;}
+  .rm-btn{cursor:pointer;font-weight:800;font-size:13px;}
+  .empty-hint-sm{font-size:12px;color:var(--text2);}
+  /* 最低人数 */
+  .min-people-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:#F8FBF9;border-radius:10px;border:1.5px solid var(--line);margin-bottom:6px;}
+  .min-people-label{flex:1;font-size:13px;font-weight:700;}
+  .min-people-input{width:60px;padding:7px 10px;border-radius:9px;border:1.5px solid var(--line);font-family:inherit;font-size:14px;text-align:center;font-weight:700;}
+  .min-people-unit{font-size:12px;color:var(--text2);font-weight:700;}
+  .min-people-desc{font-size:12px;color:var(--text);background:#F0FBF4;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box"><div class="loading-spin"></div><div class="loading-text" id="loadingText">読み込み中…</div></div>
+</div>
+
+<div class="top">
+  <div class="top-brand">
+    <div class="top-logo">🌸</div>
+    <div><div class="top-name">サクラシフト 設定</div><div class="top-sub">⚙️ マスタ管理</div></div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="add-btn" id="settingsBackBtn" style="padding:8px 14px;font-size:12px;background:linear-gradient(135deg,#A7E8C8,#5FD0A0)">📋 チェック画面</button>
+    <button class="add-btn" id="settingsLogoutBtn" style="padding:8px 14px;font-size:12px;background:linear-gradient(135deg,#FFB9B9,#FF8A80)">ログアウト</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card acc" id="accCast">
+    <div class="card-title" onclick="toggleAcc('accCast')"><span class="acc-arrow">▼</span><span class="ico">👤</span>キャスト管理</div>
+    <div class="card-body">
+    <div class="add-row">
+      <input class="form-input" id="newCastName" placeholder="キャスト名" style="flex:1;min-width:120px" autocomplete="off">
+      <input class="form-input" id="newCastPw" placeholder="PW(3桁)" maxlength="3" style="width:80px;text-align:center;letter-spacing:.1em" inputmode="numeric" readonly>
+      <button class="add-btn" onclick="onAddCast()">＋ 追加</button>
+    </div>
+    <div style="margin-bottom:12px">
+      <button class="add-btn" style="background:linear-gradient(135deg,#D9C9F5,#B39DDB);width:100%" onclick="SettingsApp.bulkRegenPw()">🔄 全キャストのPWを3桁で一括再生成</button>
+    </div>
+    <div id="castListBox"></div>
+    <div class="hint">※ 変更後は下の「まとめて保存」を押してください。削除するとシフトデータも含めて完全に削除されます（元に戻せません）。</div>
+    </div>
+  </div>
+
+  <div class="card acc" id="accStaff">
+    <div class="card-title" onclick="toggleAcc('accStaff')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#D7F5E6,#A7E8C8)">🌿</span>内勤スタッフ管理</div>
+    <div class="card-body">
+    <div class="add-row">
+      <input class="form-input" id="newStaffName" placeholder="内勤名" style="flex:1;min-width:120px" autocomplete="off">
+      <input type="color" class="color-input" id="newStaffColor" value="#5FD0A0">
+      <button class="add-btn" onclick="onAddStaff()">＋ 追加</button>
+    </div>
+    <div id="staffListBox"></div>
+    <div class="hint">※ 色はチェック表で「誰が入力したか」の目印になります。</div>
+    </div>
+  </div>
+
+  <div class="card acc" id="accNotice">
+    <div class="card-title" onclick="toggleAcc('accNotice')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#FFF6DD,#FFE9A8)">📢</span>お知らせ</div>
+    <div class="card-body">
+    <div style="margin-bottom:16px">
+      <label class="notice-label">🌷 全体お知らせ（全員の画面に表示）</label>
+      <textarea class="notice-area" id="noticeInput" placeholder="例：今月もおつかれさまです。ご不明な点は店長まで♪" onchange="SettingsApp.saveNotice(this.value)"></textarea>
+    </div>
+    <div style="border-top:1.5px dashed var(--line);padding-top:14px">
+      <label class="notice-label">💌 個別お知らせ（選んだキャストの通知に届く）</label>
+      <select class="form-input" id="castNoticeSelect" style="width:100%;margin-bottom:8px"></select>
+      <textarea class="notice-area" id="castNoticeMsg" placeholder="そのキャストへのメッセージ"></textarea>
+      <button class="add-btn" style="margin-top:8px" onclick="onSendCastNotice()">💌 通知を送る</button>
+    </div>
+    </div>
+  </div>
+
+  <div class="card acc" id="accBiz">
+    <div class="card-title" onclick="toggleAcc('accBiz')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#DBF0FF,#BDE3FF)">🕐</span>営業時間・休業日設定</div>
+    <div class="card-body">
+      <div id="bizHoursBox"></div>
+    </div>
+  </div>
+
+  <div class="card acc" id="accMin">
+    <div class="card-title" onclick="toggleAcc('accMin')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#D9C9F5,#BCA4E8)">⚙️</span>時間帯別最低人数設定</div>
+    <div class="card-body">
+      <div id="minPeopleBox"></div>
+      <div class="hint">※ この人数を下回る時間帯は人数確認画面で赤く表示されます</div>
+    </div>
+  </div>
+
+  <div class="card acc" id="accEmail">
+    <div class="card-title" onclick="toggleAcc('accEmail')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#A7E8C8,#5FD0A0)">📧</span>メールアドレス設定</div>
+    <div class="card-body">
+      <div>
+        <label class="notice-label">📮 内勤共通メールアドレス</label>
+        <input class="form-input" type="email" id="staffEmailInput" placeholder="例：sakura-staff@gmail.com" style="width:100%"
+          onchange="SettingsApp.setStaffEmail(this.value)">
+        <div class="hint">キャストへのシフト確定・却下などの通知メールの送信元になります</div>
+      </div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1.5px dashed var(--line)">
+        <label class="notice-label">🔑 内勤共通ログインPW</label>
+        <input class="form-input" type="text" id="staffPwInput" placeholder="内勤共通パスワード" style="width:100%;letter-spacing:.1em"
+          onchange="SettingsApp.setStaffPw(this.value)" autocomplete="new-password">
+        <div class="hint">内勤ログイン画面で使う共通パスワードです。スタッフ全員が同じPWを使います</div>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1.5px dashed var(--line)">
+        <div class="notice-label">💌 キャスト別メールアドレス</div>
+        <div class="hint">キャスト自身が通知タブ内で任意登録します</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card acc" id="accReset">
+    <div class="card-title" onclick="toggleAcc('accReset')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#FFE0DC,#FFBDB7)">🗑</span>データリセット（テスト用）</div>
+    <div class="card-body">
+      <div class="hint" style="margin-bottom:12px">シフト入力・チェック・備考・完全終了・通知のデータを削除します。マスタ（キャスト一覧・スタッフ）は消えません。</div>
+      <div class="reset-row">
+        <label class="reset-label">対象</label>
+        <select class="form-input" id="resetTarget" style="flex:1">
+          <option value="all">全キャスト（全データ）</option>
+        </select>
+      </div>
+      <button class="reset-btn" id="resetBtn">🗑 選択したデータを削除</button>
+      <div class="reset-result" id="resetResult"></div>
+    </div>
+  </div>
+</div>
+
+<div class="save-bar" id="saveBar">
+  <span class="save-bar-text">⚠️ 未保存の変更があります</span>
+  <button class="save-bar-btn" onclick="SettingsApp.saveAll()">💾 まとめて保存</button>
+</div>
+
+<script>
+/* ============================================================
+   config.js — 定数とステータス定義（1箇所に集約）
+   sakurashift v2
+   ============================================================ */
+
+/* ---------- GAS接続情報 ---------- */
+const CONFIG = {
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbyvlg5JbvPsqxkdvztwRXYBqPkvWjknicwfm2ksTlIxIQ-7N1zd72cn09c6oSNIkIxw/exec',
+  TOKEN: 'sakura2025shift',
+  SAVE_DEBOUNCE_MS: 500,
+  SAVE_RETRY: 3,
+  AUTO_LOGOUT_MS: 30 * 60 * 1000,
+  AUTO_LOGOUT_WARN_MS: 60 * 1000,
+  NTF_POLL_MS: 2 * 60 * 1000,
+};
+
+/* ---------- 店舗・媒体 ---------- */
+const STORES = ['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'];
+
+const STORE_SHORT = {
+  '記録簿':'記録簿','サクラムーン':'サクラ','ラナ鶯谷':'ラナ鶯','ラナ錦糸町':'ラナ錦糸',
+  'ドレスガーデン':'ドレス','ピーチムーン':'ピーチ','逆AF倶楽部':'逆AF','キューティー':'キュティ',
+  '18':'18','極門':'極門','ヘブンラナ':'ヘブンラナ','ヘブンサクラ':'ヘブンサクラ',
+  '(キュ)ぴゅあらば':'(キュ)ぴゅ','(キュ)情報局':'(キュ)情報',
+  '(極)ぴゅあらば':'(極)ぴゅ','(極)情報局':'(極)情報',
+};
+
+/* 新規キャスト追加時にデフォルトでオンにする店舗 */
+const DEFAULT_STORES = ['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','ヘブンラナ','ヘブンサクラ'];
+/* 全キャスト必須・外せない店舗 */
+const REQUIRED_STORES = ['記録簿'];
+
+/* ---------- 時間帯（1時間ごと18項目：12時〜翌5時） ----------
+   カウントルール：
+   - 12〜28時：start <= h < end の人をカウント（退勤ちょうどは除く）
+   - 29時（翌5時）：end===29 の人も含む（5時退勤はカウント対象）
+   ---------------------------------------------------------- */
+const TIME_ZONES = [
+  {label:'12時',h:12},{label:'13時',h:13},{label:'14時',h:14},{label:'15時',h:15},
+  {label:'16時',h:16},{label:'17時',h:17},{label:'18時',h:18},{label:'19時',h:19},
+  {label:'20時',h:20},{label:'21時',h:21},{label:'22時',h:22},{label:'23時',h:23},
+  {label:'24時',h:24},{label:'25時',h:25},{label:'26時',h:26},{label:'27時',h:27},
+  {label:'28時',h:28},{label:'29時(翌5時)',h:29},
+];
+
+/* 時間hに出勤中かどうか判定 */
+function isWorkingAt(shift, h){
+  if(!shift || shift.start==null || shift.end==null) return false;
+  if(h === 29) return shift.start <= 29 && shift.end >= 29; // 5時退勤も含む
+  return shift.start <= h && h < shift.end; // 退勤ちょうどは除く
+}
+
+/* ---------- かな行（検索ジャンプ用） ---------- */
+const KANA_GROUPS = [
+  {label:'あ',chars:['あ','い','う','え','お']},
+  {label:'か',chars:['か','き','く','け','こ','が','ぎ','ぐ','げ','ご']},
+  {label:'さ',chars:['さ','し','す','せ','そ','ざ','じ','ず','ぜ','ぞ']},
+  {label:'た',chars:['た','ち','つ','て','と','だ','ぢ','づ','で','ど']},
+  {label:'な',chars:['な','に','ぬ','ね','の']},
+  {label:'は',chars:['は','ひ','ふ','へ','ほ','ば','び','ぶ','べ','ぼ','ぱ','ぴ','ぷ','ぺ','ぽ']},
+  {label:'ま',chars:['ま','み','む','め','も']},
+  {label:'や',chars:['や','ゆ','よ']},
+  {label:'ら',chars:['ら','り','る','れ','ろ']},
+  {label:'わ',chars:['わ','を','ん']},
+];
+
+/* ---------- 営業時間デフォルト値 ---------- */
+// dow: 0=日,1=月,2=火,3=水,4=木,5=金,6=土
+const DEFAULT_BIZ_HOURS = {
+  weekly: {
+    0:{open:12,close:29}, 1:{open:12,close:22}, 2:{open:12,close:29},
+    3:{open:12,close:29}, 4:{open:12,close:29}, 5:{open:12,close:29},
+    6:{open:12,close:29},
+  },
+  special: {},   // {'2026-07-04':{open:15,close:25}} など
+  closed:  [],   // ['2026-01-01'] など
+};
+
+/* ---------- 時間帯別最低人数デフォルト（1時間ごと18項目） ---------- */
+const DEFAULT_MIN_PEOPLE = {
+  h12:2, h13:2, h14:2, h15:2, h16:2, h17:2,
+  h18:3, h19:3, h20:3,
+  h21:4, h22:4, h23:4,
+  h24:3, h25:3, h26:2, h27:2, h28:2, h29:2,
+};
+
+/* 時間帯キー変換 */
+function tzMinKey(tz){ return `h${tz.h}`; }
+function getBizHours(settings){
+  const bh = (settings && settings.businessHours) || {};
+  return {
+    weekly:  bh.weekly  || DEFAULT_BIZ_HOURS.weekly,
+    special: bh.special || {},
+    closed:  bh.closed  || [],
+  };
+}
+function getMinPeople(settings){
+  return (settings && settings.minPeople) || DEFAULT_MIN_PEOPLE;
+}
+function getBizOfDay(ds, settings){
+  const bh = getBizHours(settings);
+  if(bh.closed.includes(ds)) return null; // 休業日
+  const special = bh.special[ds];
+  if(special) return special;
+  const dow = new Date(ds+'T12:00:00').getDay();
+  return bh.weekly[dow] || {open:12,close:29};
+}
+
+/* ---------- 祝日 ---------- */
+const DOWNAMES = ['月','火','水','木','金','土','日'];
+const AVC = ['av-0','av-1','av-2','av-3','av-4'];
+
+/* ============================================================
+   ステータス定義（Q4の決定：1箇所に集約・判定は関数経由）
+   ============================================================ */
+const STATUS = {
+  unsubmitted:      { label:'未提出',     badge:'badge-gray',   locked:false, inbox:false, editable:true  },
+  waiting:          { label:'提出済み',   badge:'badge-warning',locked:false, inbox:true,  editable:true  }, // キャスト編集可能
+  inputting:        { label:'内勤入力中', badge:'badge-info',   locked:true,  inbox:false, editable:false }, // 内勤が触ったらロック
+  confirmed:        { label:'確定',       badge:'badge-success',locked:true,  inbox:false, editable:false },
+  change_requested: { label:'変更申請中', badge:'badge-pink',   locked:true,  inbox:true,  editable:false },
+  change_inputting: { label:'変更入力中', badge:'badge-info',   locked:true,  inbox:false, editable:false },
+  change_confirmed: { label:'変更確定',   badge:'badge-success',locked:true,  inbox:false, editable:false },
+};
+
+/* ---------- ステータス遷移ルール ---------- */
+const TRANSITIONS = {
+  unsubmitted:      ['waiting'],
+  waiting:          ['inputting','confirmed','unsubmitted'], // キャストが取り下げ可能
+  inputting:        ['confirmed','waiting'],
+  confirmed:        ['change_requested'],
+  change_requested: ['change_inputting','confirmed'],
+  change_inputting: ['change_confirmed','confirmed'],
+  change_confirmed: ['change_requested'],
+};
+
+/* ---------- ステータス判定関数（ハードコード禁止） ---------- */
+function statusLabel(s){ return (STATUS[s]||{}).label || s || '未提出'; }
+function statusBadge(s){ return (STATUS[s]||{}).badge || 'badge-gray'; }
+function isLocked(s){ return !!(STATUS[s]||{}).locked; }
+function showInInbox(s){ return !!(STATUS[s]||{}).inbox; }
+function isEditable(s){ return !!(STATUS[s]||{}).editable; }
+function canTransition(from, to){
+  const allowed = TRANSITIONS[from] || [];
+  return allowed.includes(to);
+}
+
+/* ============================================================
+   権限設計
+   ============================================================ */
+const ROLE_PERMISSIONS = {
+  cast:  { editOwnShift:true,  viewOthers:false, submitChangeRequest:true,
+           editAllShifts:false, confirm:false, editMaster:false, deleteData:false },
+  staff: { editOwnShift:false, viewOthers:true,  submitChangeRequest:false,
+           editAllShifts:true,  confirm:true,    editMaster:false, deleteData:false },
+  admin: { editOwnShift:false, viewOthers:true,  submitChangeRequest:false,
+           editAllShifts:true,  confirm:true,    editMaster:true,  deleteData:true  },
+};
+function can(role, perm){ return !!((ROLE_PERMISSIONS[role]||{})[perm]); }
+
+/* ============================================================
+   エラー分類
+   ============================================================ */
+const ERROR_MESSAGES = {
+  NETWORK:    '📡 通信エラー：ネット接続を確認してください',
+  CONFLICT:   '⚠️ 競合：他の人が先に更新しました。同期してください',
+  PERMISSION: '🔒 権限エラー：この操作はできません',
+  VALIDATION: '✏️ 入力エラー：入力内容を確認してください',
+  SERVER:     '🛠 サーバーエラー：管理者へ連絡してください',
+  LOCKED:     '🔒 ロック中：提出済みのため編集できません',
+};
+function errorMessage(code){
+  const base = String(code||'').split(':')[0];
+  return ERROR_MESSAGES[base] || ('エラー：'+code);
+}
+
+/* ---------- 祝日（2025-2027） ---------- */
+const JP_HOLIDAYS = new Set([
+  '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24','2025-03-20',
+  '2025-04-29','2025-05-03','2025-05-04','2025-05-05','2025-05-06','2025-07-21',
+  '2025-08-11','2025-09-15','2025-09-23','2025-10-13','2025-11-03','2025-11-23','2025-11-24','2025-12-23',
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23','2026-03-20',
+  '2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06','2026-07-20',
+  '2026-08-11','2026-09-21','2026-09-22','2026-09-23','2026-10-12','2026-11-03','2026-11-23','2026-12-23',
+  '2027-01-01','2027-01-11','2027-02-11','2027-02-23','2027-03-21','2027-03-22',
+  '2027-04-29','2027-05-03','2027-05-04','2027-05-05','2027-07-19',
+  '2027-08-11','2027-09-20','2027-09-23','2027-10-11','2027-11-03','2027-11-23','2027-12-23',
+]);
+function isJpHoliday(ds){ return JP_HOLIDAYS.has(ds); }
+
+
+/* ============================================================
+   utils.js — 共通ユーティリティ（週キー計算・日付・フォーマット）
+   sakurashift v2
+   純粋関数のみ。状態を持たない・副作用なし。
+   ============================================================ */
+
+function ymd(d){
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+function weekKeyOf(dateOrStr){
+  let d;
+  if(typeof dateOrStr === 'string'){
+    const [y,m,day] = dateOrStr.split('-').map(Number);
+    d = new Date(y, m-1, day, 12, 0, 0);
+  } else {
+    d = new Date(dateOrStr);
+    d.setHours(12,0,0,0);
+  }
+  const dow = d.getDay();
+  const diffToMonday = dow===0 ? -6 : 1-dow;
+  d.setDate(d.getDate() + diffToMonday);
+  return ymd(d);
+}
+
+function weekDates(weekKey){
+  const [y,m,day] = weekKey.split('-').map(Number);
+  const monday = new Date(y, m-1, day, 12, 0, 0);
+  const out = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(monday);
+    d.setDate(monday.getDate()+i);
+    out.push(ymd(d));
+  }
+  return out;
+}
+
+function currentWeekKey(){ return weekKeyOf(new Date()); }
+function nextWeekKey(n=1){
+  const [y,m,day] = currentWeekKey().split('-').map(Number);
+  const d = new Date(y, m-1, day, 12,0,0);
+  d.setDate(d.getDate() + 7*n);
+  return ymd(d);
+}
+
+function weekLabel(weekKey){
+  const ds = weekDates(weekKey);
+  const f = (s)=>{ const d=new Date(s+'T12:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${DOWNAMES[(d.getDay()+6)%7]})`; };
+  return `${f(ds[0])} 〜 ${f(ds[6])}`;
+}
+
+function relativeWeekLabel(weekKey){
+  const cur = currentWeekKey();
+  if(weekKey===cur) return '今週';
+  const [y1,m1,d1]=cur.split('-').map(Number);
+  const [y2,m2,d2]=weekKey.split('-').map(Number);
+  const diffDays = Math.round((new Date(y2,m2-1,d2) - new Date(y1,m1-1,d1)) / 86400000);
+  const weeks = Math.round(diffDays/7);
+  if(weeks===1) return '来週';
+  if(weeks>=2 && weeks<=8) return `${weeks}週間後`;
+  if(weeks===-1) return '先週';
+  return weekLabel(weekKey);
+}
+
+function weekTouchesMonth(weekKey, yearMonth){
+  return weekDates(weekKey).some(ds => ds.slice(0,7)===yearMonth);
+}
+
+function weeksInMonth(yearMonth){
+  const [y,m] = yearMonth.split('-').map(Number);
+  const first = new Date(y, m-1, 1, 12,0,0);
+  const last  = new Date(y, m,   0, 12,0,0);
+  const out = new Set();
+  for(let d=new Date(first); d<=last; d.setDate(d.getDate()+1)){
+    out.add(weekKeyOf(ymd(d)));
+  }
+  return [...out].sort();
+}
+
+function fmtHour(h){
+  if(h==null) return '';
+  const hh = Math.floor(h);
+  const mm = (h%1)*60;
+  return `${hh}:${String(mm).padStart(2,'0')}`;
+}
+function fmtRange(start,end){
+  if(start==null||end==null) return '休';
+  return `${fmtHour(start)}〜${fmtHour(end)}`;
+}
+
+function fmtShiftHour(h){ return h>=25 ? (h-24) : h; }
+function fmtShift(start,end){
+  if(start==null) return 'お休み';
+  return fmtShiftHour(start)+'-'+fmtShiftHour(end);
+}
+
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function nowIso(){ return new Date().toISOString(); }
+
+function kanaGroupOf(name){
+  const first = (name||'')[0];
+  for(const g of KANA_GROUPS){ if(g.chars.includes(first)) return g.label; }
+  return 'その他';
+}
+
+
+/* ============================================================
+   validate.js — バリデーション（A4）
+   sakurashift v2
+   ============================================================ */
+
+function validateShift(ds, shift){
+  if(shift==null) return {ok:true};
+  const {start,end} = shift;
+  if(start==null && end==null) return {ok:true};
+  if(start==null || end==null) return {ok:false, error:'VALIDATION:開始と終了の両方が必要'};
+  if(typeof start!=='number' || typeof end!=='number') return {ok:false, error:'VALIDATION:時刻は数値'};
+  if(start >= end) return {ok:false, error:'VALIDATION:開始<終了でない('+start+'>='+end+')'};
+  if(start < 0 || end > 30) return {ok:false, error:'VALIDATION:時刻が範囲外'};
+  return {ok:true};
+}
+
+function validateDateInWeek(ds, weekKey){
+  if(weekKeyOf(ds) !== weekKey){
+    return {ok:false, error:'VALIDATION:日付'+ds+'は週'+weekKey+'に属さない'};
+  }
+  return {ok:true};
+}
+
+function validateStatus(status){
+  if(!STATUS[status]) return {ok:false, error:'VALIDATION:未定義のステータス('+status+')'};
+  return {ok:true};
+}
+
+function validateCastExists(castName, castList){
+  if(!castList || !castList.some(c=>c.name===castName)){
+    return {ok:false, error:'VALIDATION:存在しないキャスト('+castName+')'};
+  }
+  return {ok:true};
+}
+
+function validateWeekData(cast, weekKey, w){
+  const s = validateStatus(w.status);
+  if(!s.ok) return s;
+
+  for(const ds in (w.shifts||{})){
+    const inWeek = validateDateInWeek(ds, weekKey);
+    if(!inWeek.ok) return inWeek;
+    const sh = validateShift(ds, w.shifts[ds]);
+    if(!sh.ok) return sh;
+  }
+
+  if(w.changeRequest){
+    for(const ds in w.changeRequest){
+      const inWeek = validateDateInWeek(ds, weekKey);
+      if(!inWeek.ok) return inWeek;
+      const ch = w.changeRequest[ds];
+      if(ch.type==='time'){
+        const sh = validateShift(ds, {start:ch.start, end:ch.end});
+        if(!sh.ok) return sh;
+      }
+    }
+  }
+
+  let warning = null;
+  if(w.status==='confirmed' && Object.keys(w.shifts||{}).length===0){
+    warning = 'confirmedだがシフトが空';
+  }
+
+  return {ok:true, warning};
+}
+
+
+/* ============================================================
+   store.js — 状態管理（唯一の状態保管庫）
+   sakurashift v2
+   ============================================================ */
+
+function emptyWeek(){
+  return {
+    status: 'unsubmitted',
+    shifts: {},
+    checks: {},
+    memo: {},
+    changeRequest: null,
+    submittedAt: null,
+    checkedBy: null,
+    confirmedBy: null,
+    updatedAt: null,
+    updatedBy: null,
+  };
+}
+
+const Store = (function(){
+  let state = {
+    weeks: {},
+    castList: [],
+    staffList: [],
+    castStores: {},
+    castAliases: {},
+    notices: [],
+    minPeople: {},
+    settings: {},
+    currentUser: null,
+    currentStaffName: '',
+  };
+
+  const dirty = new Set();
+  let _masterDirty = false;
+  const listeners = [];
+  const auditQueue = [];
+
+  function _audit(action, cast, wk, before, after, by, role){
+    auditQueue.push({
+      at: nowIso(),
+      by: by || (state.currentUser && state.currentUser.name) || state.currentStaffName || '',
+      role: role || (state.currentUser && state.currentUser.type) || '',
+      action, castName:cast, weekKey:wk,
+      before: before||null, after: after||null,
+    });
+  }
+  function _statusSnapshot(w){ return w ? {status:w.status, shiftDays:Object.keys(w.shifts||{}).length} : null; }
+
+  function getWeek(cast, wk){
+    return (state.weeks[cast] && state.weeks[cast][wk]) || null;
+  }
+  function getWeekOrEmpty(cast, wk){
+    return getWeek(cast,wk) || emptyWeek();
+  }
+  function getCastWeeks(cast){
+    return state.weeks[cast] || {};
+  }
+  function getState(){ return state; }
+
+  function _ensureWeek(cast, wk){
+    if(!state.weeks[cast]) state.weeks[cast] = {};
+    if(!state.weeks[cast][wk]) state.weeks[cast][wk] = emptyWeek();
+    return state.weeks[cast][wk];
+  }
+
+  function _touch(cast, wk, by){
+    const w = _ensureWeek(cast, wk);
+    w.updatedAt = nowIso();
+    w.updatedBy = by || (state.currentUser && state.currentUser.name) || '';
+    dirty.add(cast + '|' + wk);
+  }
+
+  function dispatch(action, payload){
+    const p = payload || {};
+    switch(action){
+
+      case 'LOAD_WEEKS': {
+        for(const cast in p.weeks){
+          if(!state.weeks[cast]) state.weeks[cast] = {};
+          for(const wk in p.weeks[cast]){
+            state.weeks[cast][wk] = p.weeks[cast][wk];
+          }
+        }
+        break;
+      }
+      case 'LOAD_MASTER': {
+        if(p.castList) state.castList = p.castList;
+        if(p.staffList) state.staffList = p.staffList;
+        if(p.notices) state.notices = p.notices;
+        if(p.minPeople) state.minPeople = p.minPeople;
+        if(p.settings) state.settings = p.settings;
+        if(p.castStores) state.castStores = p.castStores;
+        if(p.castAliases) state.castAliases = p.castAliases;
+        // 初回ロード以外（settingsのみ更新など）はdirtyにしない
+        // → settings_app側でmarkUnsaved()を呼ぶので_masterDirtyはここではセットしない
+        break;
+      }
+
+      case 'ADD_CAST': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        if(!p.name) return {error:'VALIDATION:名前が空'};
+        if(state.castList.some(c=>c.name===p.name)) return {error:'VALIDATION:同名のキャストが存在'};
+        state.castList.push({name:p.name, pw:p.pw||''});
+        if(!state.castStores) state.castStores={};
+        state.castStores[p.name] = [...DEFAULT_STORES];
+        _masterDirty = true;
+        break;
+      }
+      case 'REMOVE_CAST': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        state.castList = state.castList.filter(c=>c.name!==p.name);
+        _masterDirty = true;
+        break;
+      }
+      case 'UPDATE_CAST_PW': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        const c = state.castList.find(x=>x.name===p.name);
+        if(c) c.pw = p.pw;
+        _masterDirty = true;
+        break;
+      }
+      case 'TOGGLE_CAST_STORE': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        if(REQUIRED_STORES.includes(p.store)) return {error:'VALIDATION:必須店舗は外せません'};
+        if(!state.castStores) state.castStores={};
+        if(!state.castStores[p.cast]) state.castStores[p.cast]=[];
+        const arr = state.castStores[p.cast];
+        const i = arr.indexOf(p.store);
+        if(i>=0) arr.splice(i,1); else arr.push(p.store);
+        _masterDirty = true;
+        break;
+      }
+      case 'ADD_STAFF': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        if(!p.name) return {error:'VALIDATION:名前が空'};
+        if(state.staffList.some(s=>s.name===p.name)) return {error:'VALIDATION:同名の内勤が存在'};
+        state.staffList.push({name:p.name, color:p.color||'#5FD0A0'});
+        _masterDirty = true;
+        break;
+      }
+      case 'REMOVE_STAFF': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        state.staffList = state.staffList.filter(s=>s.name!==p.name);
+        _masterDirty = true;
+        break;
+      }
+      case 'UPDATE_STAFF': {
+        if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
+        const s = state.staffList.find(x=>x.name===p.name);
+        if(s){ if(p.newName!=null)s.name=p.newName; if(p.color!=null)s.color=p.color; }
+        _masterDirty = true;
+        break;
+      }
+      case 'SET_NOTICE': {
+        if(p.role && !can(p.role,'editAllShifts') && !can(p.role,'editMaster')) return {error:'PERMISSION'};
+        state.settings = state.settings || {};
+        state.settings.notice = p.notice;
+        _masterDirty = true;
+        break;
+      }
+      case 'SET_CAST_ALIAS': {
+        if(p.role && !can(p.role,'editAllShifts') && !can(p.role,'editMaster')) return {error:'PERMISSION'};
+        if(!state.castAliases) state.castAliases = {};
+        if(!state.castAliases[p.cast]) state.castAliases[p.cast] = {};
+        if(p.alias) state.castAliases[p.cast][p.store] = p.alias;
+        else delete state.castAliases[p.cast][p.store];
+        _masterDirty = true;
+        break;
+      }
+
+      case 'SET_USER': { state.currentUser = p.user; break; }
+      case 'SET_STAFF_NAME': { state.currentStaffName = p.name; break; }
+
+      case 'SET_SHIFT': {
+        const wk = weekKeyOf(p.ds);
+        const w = _ensureWeek(p.cast, wk);
+        if(!canEditByStatus(w.status)) return {error:'LOCKED'};
+        if(p.start!=null){
+          const v = validateShift(p.ds, {start:p.start, end:p.end});
+          if(!v.ok) return {error:v.error};
+        }
+        if(p.start==null){ delete w.shifts[p.ds]; }
+        else { w.shifts[p.ds] = {start:p.start, end:p.end, memo:p.memo||''}; }
+        _touch(p.cast, wk, p.cast);
+        break;
+      }
+
+      // ① 日付ごと備考（キャストが書く・提出前のみ）
+      case 'SET_DAY_MEMO': {
+        const wk = weekKeyOf(p.ds);
+        const w = _ensureWeek(p.cast, wk);
+        if(isLocked(w.status)) return {error:'LOCKED'};
+        if(!w.dayMemos) w.dayMemos = {};
+        if(p.memo){ w.dayMemos[p.ds] = p.memo; }
+        else { delete w.dayMemos[p.ds]; }
+        _touch(p.cast, wk, p.cast);
+        break;
+      }
+
+      // ③ 完全終了フラグ（キャストが書く・提出前のみ）
+      case 'SET_KANZEN': {
+        const wk = weekKeyOf(p.ds);
+        const w = _ensureWeek(p.cast, wk);
+        if(isLocked(w.status)) return {error:'LOCKED'};
+        if(!w.kanzen) w.kanzen = {};
+        if(p.value){ w.kanzen[p.ds] = true; }
+        else { delete w.kanzen[p.ds]; }
+        _touch(p.cast, wk, p.cast);
+        break;
+      }
+
+      // ② 内勤メモ（内勤だけが書く）
+      case 'SET_STAFF_MEMO': {
+        const w = _ensureWeek(p.cast, p.wk);
+        w.staffMemo = p.memo || '';
+        _touch(p.cast, p.wk, state.currentStaffName);
+        break;
+      }
+
+      // 長期休暇リクエスト送信（キャスト→内勤）
+      case 'REQUEST_VACATION': {
+        // p = {cast, dates:['2026-07-01',...], memo:'出稼ぎ 東京 〇〇店'}
+        // 日付ごとに所属週のvacationRequestにセット
+        const byWk = {};
+        (p.dates||[]).forEach(ds=>{
+          const wk = weekKeyOf(ds);
+          if(!byWk[wk]) byWk[wk] = [];
+          byWk[wk].push(ds);
+        });
+        for(const wk in byWk){
+          const w = _ensureWeek(p.cast, wk);
+          if(!w.vacationRequests) w.vacationRequests = [];
+          // 重複除去してプッシュ
+          byWk[wk].forEach(ds=>{
+            if(!w.vacationRequests.find(r=>r.ds===ds)){
+              w.vacationRequests.push({ds, memo:p.memo||'', requestedAt:nowIso()});
+            }
+          });
+          _touch(p.cast, wk, p.cast);
+        }
+        break;
+      }
+
+      // 長期休暇受理（内勤）→ vacation フラグをセット
+      case 'ACCEPT_VACATION': {
+        // p = {cast, dates, memo, by}
+        const byWk2 = {};
+        (p.dates||[]).forEach(ds=>{
+          const wk = weekKeyOf(ds);
+          if(!byWk2[wk]) byWk2[wk] = [];
+          byWk2[wk].push(ds);
+        });
+        for(const wk in byWk2){
+          const w = _ensureWeek(p.cast, wk);
+          if(!w.vacations) w.vacations = {};
+          byWk2[wk].forEach(ds=>{
+            w.vacations[ds] = {memo:p.memo||'', acceptedBy:p.by||state.currentStaffName, acceptedAt:nowIso()};
+          });
+          // vacationRequestsから該当日を削除
+          if(w.vacationRequests){
+            w.vacationRequests = w.vacationRequests.filter(r=>!byWk2[wk].includes(r.ds));
+          }
+          _touch(p.cast, wk, p.by||state.currentStaffName);
+        }
+        break;
+      }
+
+      // 長期休暇却下（内勤）→ vacationRequestsを削除
+      case 'REJECT_VACATION': {
+        const byWk3 = {};
+        (p.dates||[]).forEach(ds=>{
+          const wk = weekKeyOf(ds);
+          if(!byWk3[wk]) byWk3[wk] = [];
+          byWk3[wk].push(ds);
+        });
+        for(const wk in byWk3){
+          const w = _ensureWeek(p.cast, wk);
+          if(w.vacationRequests){
+            w.vacationRequests = w.vacationRequests.filter(r=>!byWk3[wk].includes(r.ds));
+          }
+          _touch(p.cast, wk, p.by||state.currentStaffName);
+        }
+        break;
+      }
+
+      // 長期休暇取り消し（内勤）→ vacationsを削除
+      case 'CANCEL_VACATION': {
+        const byWk4 = {};
+        (p.dates||[]).forEach(ds=>{
+          const wk = weekKeyOf(ds);
+          if(!byWk4[wk]) byWk4[wk] = [];
+          byWk4[wk].push(ds);
+        });
+        for(const wk in byWk4){
+          const w = _ensureWeek(p.cast, wk);
+          if(w.vacations){
+            byWk4[wk].forEach(ds=>{ delete w.vacations[ds]; });
+          }
+          _touch(p.cast, wk, p.by||state.currentStaffName);
+        }
+        break;
+      }
+
+      case 'SUBMIT_WEEK': {
+        const w = _ensureWeek(p.cast, p.wk);
+        if(!canTransition(w.status, 'waiting')) return {error:'BAD_TRANSITION'};
+        const before = _statusSnapshot(w);
+        w.status = 'waiting';
+        w.submittedAt = nowIso();
+        _touch(p.cast, p.wk, p.cast);
+        _audit('SUBMIT_WEEK', p.cast, p.wk, before, _statusSnapshot(w));
+        break;
+      }
+
+      case 'SET_CHECK': {
+        const w = _ensureWeek(p.cast, p.wk);
+        const ckey = p.ds + '_' + p.media;
+        if(p.checked){ w.checks[ckey] = {checked:true, by:p.by||'', color:p.color||'', at:new Date().toISOString()}; }
+        else { delete w.checks[ckey]; }
+        if(w.status==='waiting' && canTransition('waiting','inputting')) w.status='inputting';
+        _touch(p.cast, p.wk, p.by || (state.currentStaffName));
+        break;
+      }
+
+      case 'CONFIRM_WEEK': {
+        const w = _ensureWeek(p.cast, p.wk);
+        const before = _statusSnapshot(w);
+        if(w.status==='change_inputting'){
+          _applyChangeRequest(w, p.cast, p.wk);
+          w.status = 'change_confirmed';
+        } else {
+          if(!canTransition(w.status,'confirmed')) return {error:'BAD_TRANSITION'};
+          w.status = 'confirmed';
+        }
+        w.confirmedBy = p.by || state.currentStaffName || '';
+        _touch(p.cast, p.wk, p.by || state.currentStaffName);
+        _audit('CONFIRM_WEEK', p.cast, p.wk, before, _statusSnapshot(w), p.by || state.currentStaffName, 'staff');
+        break;
+      }
+
+      case 'REQUEST_CHANGE': {
+        const w = _ensureWeek(p.cast, p.wk);
+        if(!canTransition(w.status,'change_requested')) return {error:'BAD_TRANSITION'};
+        w.changeRequest = p.changes;
+        w.status = 'change_requested';
+        _touch(p.cast, p.wk, p.cast);
+        break;
+      }
+
+      case 'ACCEPT_CHANGE': {
+        const w = _ensureWeek(p.cast, p.wk);
+        if(!canTransition(w.status,'change_inputting')) return {error:'BAD_TRANSITION'};
+        w.status = 'change_inputting';
+        _touch(p.cast, p.wk, state.currentStaffName);
+        break;
+      }
+
+      case 'REJECT_CHANGE': {
+        const w = _ensureWeek(p.cast, p.wk);
+        w.changeRequest = null;
+        w.status = 'confirmed';
+        _touch(p.cast, p.wk, state.currentStaffName);
+        break;
+      }
+
+      case 'DELETE_WEEK': {
+        if(p.role && !can(p.role, 'deleteData')) return {error:'PERMISSION'};
+        const w = _ensureWeek(p.cast, p.wk);
+        const before = _statusSnapshot(w);
+        w.deletedAt = nowIso();
+        w.deletedBy = p.by || state.currentStaffName || '';
+        _touch(p.cast, p.wk, p.by);
+        _audit('DELETE_WEEK', p.cast, p.wk, before, {deleted:true}, p.by, p.role);
+        break;
+      }
+      case 'RESTORE_WEEK': {
+        const w = _ensureWeek(p.cast, p.wk);
+        delete w.deletedAt;
+        delete w.deletedBy;
+        _touch(p.cast, p.wk, p.by);
+        _audit('RESTORE_WEEK', p.cast, p.wk, {deleted:true}, _statusSnapshot(w));
+        break;
+      }
+
+      case 'CLEAR_DIRTY': {
+        if(p.key) dirty.delete(p.key);
+        else dirty.clear();
+        break;
+      }
+
+      // ★ 通知用：週データへの通知フィールド追加
+      case 'ADD_NOTIFICATION': {
+        // p={role, castName, type, message}
+        // GAS側に送るだけ（Storeは保持しない）
+        break;
+      }
+
+      default:
+        return {error:'UNKNOWN_ACTION:'+action};
+    }
+    _notify();
+    return {ok:true};
+  }
+
+  function _applyChangeRequest(w, cast, wk){
+    if(!w.changeRequest) return;
+    for(const ds in w.changeRequest){
+      const ch = w.changeRequest[ds];
+      if(ch.type==='holiday'){
+        delete w.shifts[ds];
+      } else {
+        w.shifts[ds] = {start:ch.start, end:ch.end, memo:(w.shifts[ds]&&w.shifts[ds].memo)||''};
+      }
+      for(const ckey in w.checks){
+        if(ckey.indexOf(ds+'_')===0) delete w.checks[ckey];
+      }
+    }
+    w.changeRequest = null;
+  }
+
+  function canEditByStatus(status){
+    // unsubmitted（未提出）・waiting（提出済みだが内勤未操作）・change_inputting（変更受理後）は編集可能
+    return status==='unsubmitted' || status==='waiting' || status==='change_inputting' || isEditable(status);
+  }
+
+  function subscribe(fn){ listeners.push(fn); }
+  function _notify(){ listeners.forEach(fn=>{ try{fn(state);}catch(e){console.error(e);} }); }
+
+  function getDirtyKeys(){ return [...dirty]; }
+  function getDirtyWeek(key){
+    const [cast,wk] = key.split('|');
+    return { cast, wk, data: getWeek(cast,wk) };
+  }
+
+  function getAuditQueue(){ return [...auditQueue]; }
+  function clearAuditQueue(){ auditQueue.length = 0; }
+
+  function getCastList(){ return state.castList; }
+  function getStaffList(){ return state.staffList; }
+  function getCastStores(cast){ return (state.castStores && state.castStores[cast]) || []; }
+  function getCastAlias(cast, store){ return (state.castAliases && state.castAliases[cast] && state.castAliases[cast][store]) || ''; }
+  function getCastAliases(cast){ return (state.castAliases && state.castAliases[cast]) || {}; }
+  function getSettings(){ return state.settings || {}; }
+  function isMasterDirty(){ return _masterDirty; }
+  function clearMasterDirty(){ _masterDirty = false; }
+  function getMaster(){
+    return {
+      castList: state.castList,
+      staffList: state.staffList,
+      castStores: state.castStores,
+      castAliases: state.castAliases,
+      notices: state.notices,
+      settings: state.settings,
+    };
+  }
+
+  return {
+    dispatch, subscribe,
+    getWeek, getWeekOrEmpty, getCastWeeks, getState,
+    getDirtyKeys, getDirtyWeek,
+    getAuditQueue, clearAuditQueue,
+    getCastList, getStaffList, getCastStores, getCastAlias, getCastAliases, getSettings,
+    isMasterDirty, clearMasterDirty, getMaster,
+    emptyWeek,
+  };
+})();
+
+
+/* ============================================================
+   settings_app.js — 設定画面（マスタ管理）
+   sakurashift v2
+   ============================================================ */
+
+const MasterGas = {
+  async _get(params){
+    const p = Object.assign({token:CONFIG.TOKEN, _t:Date.now()}, params);
+    const qs = new URLSearchParams(p).toString();
+    const res = await fetch(CONFIG.GAS_URL + '?' + qs);
+    return res.json();
+  },
+  async _post(params){
+    const body = new FormData();
+    for(const k in params) body.append(k, params[k]);
+    body.append('token', CONFIG.TOKEN);
+    const res = await fetch(CONFIG.GAS_URL, {method:'POST', body});
+    return res.json();
+  },
+  async load(){
+    try{
+      const r = await this._get({action:'loadMaster'});
+      if(r && r.master){ Store.dispatch('LOAD_MASTER', r.master); }
+      return r && r.master;
+    }catch(e){ console.warn('マスタ読込エラー', e); return null; }
+  },
+  async save(){
+    // _masterDirtyではなく_unsavedで制御（settings変更はLOAD_MASTERを使うため）
+    try{
+      const master = Store.getMaster();
+      const r = await this._post({action:'saveMaster', data:JSON.stringify(master)});
+      if(r && r.success){ Store.clearMasterDirty(); return true; }
+      return false;
+    }catch(e){ console.warn('マスタ保存エラー', e); return false; }
+  },
+};
+
+const SettingsApp = (function(){
+  let role = 'staff';
+
+  async function init(opts){
+    role = (opts && opts.role) || 'staff';
+    setState('loading');
+    await MasterGas.load();
+    setState('saved');
+    renderAll();
+  }
+
+  let _state='saved';
+  function setState(s){ _state=s; renderState(); }
+  function renderState(){
+    const el=document.getElementById('settingsSaveState');
+    if(el){
+      const map={saved:'✅ 保存済み',saving:'<span class="spinner"></span>保存中…',loading:'<span class="spinner"></span>読み込み中…',error:'⚠️ 保存に失敗しました'};
+      el.innerHTML=map[_state]||'✅ 保存済み';
+      el.style.color=_state==='error'?'#E05260':'';
+    }
+    const ov=document.getElementById('loadingOverlay');
+    const txt=document.getElementById('loadingText');
+    if(ov){
+      const busy = (_state==='loading' || _state==='saving');
+      if(busy && txt) txt.textContent = (_state==='loading') ? '読み込み中…' : '保存中…';
+      ov.classList.toggle('show', busy);
+    }
+  }
+
+  let _unsaved = false;
+  function markUnsaved(){ _unsaved = true; renderSaveBar(); }
+  function renderSaveBar(){
+    const bar=document.getElementById('saveBar');
+    if(bar) bar.classList.toggle('show', _unsaved);
+  }
+  async function saveAll(){
+    setState('saving');
+    const ok = await MasterGas.save();
+    setState(ok?'saved':'error');
+    if(ok){ _unsaved=false; renderSaveBar(); toast('保存しました🌸'); }
+    else { toast('保存に失敗しました。もう一度お試しください'); }
+    return ok;
+  }
+
+  /* ============ キャスト管理 ============ */
+  function genUniquePw(usedSet){
+    for(let i=0;i<3000;i++){
+      const p=String(Math.floor(100+Math.random()*900));
+      if(!usedSet.has(p)){ usedSet.add(p); return p; }
+    }
+    return String(Math.floor(100+Math.random()*900));
+  }
+
+  function bulkRegenPw(){
+    if(!confirm('全キャストのPWを3桁数字で一括再生成します。\n現在のPWはすべて上書きされます。よろしいですか？')) return;
+    const list = Store.getCastList();
+    const used = new Set();
+    list.forEach(c=>{
+      const pw = genUniquePw(used);
+      Store.dispatch('UPDATE_CAST_PW',{name:c.name, pw, role});
+    });
+    renderCastList();
+    markUnsaved();
+    toast('全キャストのPWを3桁で再生成しました（保存ボタンで確定）🌸');
+  }
+
+  async function addCast(name, pw){
+    name=(name||'').trim();
+    if(!name){ toast('キャスト名を入力してください'); return; }
+    const r = Store.dispatch('ADD_CAST',{name, pw:(pw||'').trim(), role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    renderCastList();
+    markUnsaved();
+    toast(name+'さんを追加しました（保存ボタンで確定）🌸');
+  }
+  async function removeCast(name){
+    setState('saving');
+    try{
+      const resp = await MasterGas._post({action:'deleteCast', castName:name});
+      if(!resp || !resp.success){ setState('error'); toast('削除に失敗しました'); return; }
+    }catch(e){ setState('error'); toast('通信エラー'); return; }
+    const r = Store.dispatch('REMOVE_CAST',{name, role});
+    if(r.error){ toast(errorMessage(r.error)); setState('saved'); return; }
+    setState('saved');
+    renderCastList();
+    markUnsaved();
+    toast(name+'さんを完全に削除しました');
+  }
+  function updateCastPw(name, pw){
+    const r = Store.dispatch('UPDATE_CAST_PW',{name, pw:(pw||'').trim(), role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    markUnsaved();
+  }
+
+  function renderCastList(){
+    const el=document.getElementById('castListBox');
+    if(!el)return;
+    const list=Store.getCastList();
+    if(!list.length){ el.innerHTML='<div class="empty-hint">まだキャストがいません</div>'; return; }
+    const sorted=[...list].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    el.innerHTML=sorted.map(c=>{
+      const stores=Store.getCastStores(c.name);
+      const storeCount=stores.length;
+      const expanded = _expandedCast===c.name;
+      const storeGrid = STORES.map(s=>{
+        const on=stores.includes(s);
+        const required=REQUIRED_STORES.includes(s);
+        return `<label class="store-chip ${on?'on':''} ${required?'required':''}">
+          <input type="checkbox" ${on?'checked':''} ${required?'disabled':''}
+            onchange="SettingsApp.toggleStore('${esc(c.name)}','${esc(s)}')">
+          ${esc(s)}${required?' 🔒':''}
+        </label>`;
+      }).join('');
+      const aliasStores = ['18','極門'].filter(s=>stores.includes(s));
+      const aliasRows = aliasStores.map(s=>`
+        <div class="alias-row">
+          <span class="alias-label">${esc(s)}での名前</span>
+          <input class="alias-input" value="${esc(Store.getCastAlias(c.name,s))}" placeholder="源氏名"
+            onchange="SettingsApp.setAlias('${esc(c.name)}','${esc(s)}',this.value)">
+        </div>`).join('');
+      const aliasPanel = aliasRows ? `<div class="alias-panel"><div class="store-panel-title">🎭 店舗別の名前</div>${aliasRows}</div>` : '';
+      return `
+      <div class="cast-block">
+        <div class="cast-row">
+          <span class="cast-row-name" onclick="SettingsApp.toggleCastExpand('${esc(c.name)}')" style="cursor:pointer">
+            <span class="exp-arrow">${expanded?'▼':'▶'}</span> ${esc(c.name)}
+            <span class="store-count">${storeCount}店舗</span>
+          </span>
+          <input class="pw-input" value="${esc(c.pw||'')}" maxlength="4" placeholder="PW"
+            onchange="SettingsApp.updateCastPw('${esc(c.name)}',this.value)">
+          <button class="del-btn" onclick="SettingsApp.confirmRemoveCast('${esc(c.name)}')">削除</button>
+        </div>
+        ${expanded?`<div class="store-panel"><div class="store-panel-title">📍 所属店舗</div><div class="store-grid">${storeGrid}</div>${aliasPanel}</div>`:''}
+      </div>`;
+    }).join('');
+  }
+
+  let _expandedCast=null;
+  function toggleCastExpand(name){
+    _expandedCast = (_expandedCast===name) ? null : name;
+    renderCastList();
+  }
+  function toggleStore(cast, store){
+    const r = Store.dispatch('TOGGLE_CAST_STORE',{cast, store, role});
+    if(r.error){ toast(errorMessage(r.error)); renderCastList(); return; }
+    renderCastList();
+    markUnsaved();
+  }
+  function setAlias(cast, store, alias){
+    const r = Store.dispatch('SET_CAST_ALIAS',{cast, store, alias:(alias||'').trim(), role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    markUnsaved();
+  }
+  function confirmRemoveCast(name){
+    if(confirm(name+'さんを完全に削除しますか？\n⚠️ シフトデータも全て削除されます。\nこの操作は元に戻せません。')){
+      removeCast(name);
+    }
+  }
+
+  /* ============ スタッフ管理 ============ */
+  async function addStaff(name, color){
+    name=(name||'').trim();
+    if(!name){ toast('内勤名を入力してください'); return; }
+    const r = Store.dispatch('ADD_STAFF',{name, color:color||'#5FD0A0', role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    renderStaffList();
+    markUnsaved();
+    toast(name+'さんを追加しました（保存ボタンで確定）🌿');
+  }
+  async function removeStaff(name){
+    const r = Store.dispatch('REMOVE_STAFF',{name, role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    renderStaffList();
+    markUnsaved();
+    toast(name+'さんを削除しました（保存ボタンで確定）');
+  }
+  function updateStaffColor(name, color){
+    const r = Store.dispatch('UPDATE_STAFF',{name, color, role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    renderStaffList();
+    markUnsaved();
+  }
+
+  function renderStaffList(){
+    const el=document.getElementById('staffListBox');
+    if(!el)return;
+    const list=Store.getStaffList();
+    if(!list.length){ el.innerHTML='<div class="empty-hint">まだ内勤がいません</div>'; return; }
+    el.innerHTML=list.map(s=>`
+      <div class="cast-row">
+        <span class="staff-dot-big" style="background:${esc(s.color)}"></span>
+        <span class="cast-row-name">${esc(s.name)}</span>
+        <input type="color" class="color-input" value="${esc(s.color)}"
+          onchange="SettingsApp.updateStaffColor('${esc(s.name)}',this.value)">
+        <button class="del-btn" onclick="SettingsApp.confirmRemoveStaff('${esc(s.name)}')">削除</button>
+      </div>`).join('');
+  }
+  function confirmRemoveStaff(name){
+    if(confirm(name+'さんを内勤リストから削除しますか？')) removeStaff(name);
+  }
+
+  /* ============ お知らせ設定 ============ */
+  async function saveNotice(text){
+    const r = Store.dispatch('SET_NOTICE',{notice:(text||'').trim(), role});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    markUnsaved();
+    toast('お知らせを編集しました（保存ボタンで確定）📢');
+  }
+  function renderNotice(){
+    const el=document.getElementById('noticeInput');
+    if(el){ el.value = Store.getSettings().notice || ''; }
+  }
+
+  async function sendCastNotice(castName, message){
+    castName=(castName||'').trim(); message=(message||'').trim();
+    if(!castName){ toast('キャストを選んでください'); return; }
+    if(!message){ toast('メッセージを入力してください'); return; }
+    setState('saving');
+    try{
+      await MasterGas._post({action:'addNotification', role:'cast', castName, type:'notice', message});
+      setState('saved');
+      toast(castName+'さんに通知を送りました💌');
+      const mi=document.getElementById('castNoticeMsg'); if(mi)mi.value='';
+    }catch(e){
+      setState('error'); toast('送信に失敗しました');
+    }
+  }
+  function renderCastNoticeSelect(){
+    const sel=document.getElementById('castNoticeSelect');
+    if(!sel)return;
+    const list=[...Store.getCastList()].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+    sel.innerHTML='<option value="">キャストを選択</option>'+list.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  }
+
+  function renderAll(){
+    renderCastList();
+    renderStaffList();
+    renderNotice();
+    renderCastNoticeSelect();
+    renderBizHours();
+    renderMinPeople();
+    renderEmails();
+  }
+
+  function toast(msg){
+    let t=document.getElementById('settingsToast');
+    if(!t){ t=document.createElement('div'); t.id='settingsToast'; t.className='toast'; document.body.appendChild(t); }
+    t.textContent=msg; t.classList.add('show');
+    clearTimeout(window._stToast);
+    window._stToast=setTimeout(()=>t.classList.remove('show'),2200);
+  }
+
+  /* ============ 営業時間設定 ============ */
+  const DOW_LABELS = ['日','月','火','水','木','金','土'];
+  function _getBH(){ return getBizHours(Store.getSettings()); }
+  function _getMP(){ return getMinPeople(Store.getSettings()); }
+
+  function _hourOpts(from, to, selected){
+    let out='';
+    for(let h=from;h<=to;h++){
+      const label = h>=24 ? (h-24)+'(翌)' : String(h);
+      out+=`<option value="${h}" ${selected===h?'selected':''}>${label}時</option>`;
+    }
+    return out;
+  }
+
+  function renderBizHours(){
+    const el=document.getElementById('bizHoursBox');
+    if(!el)return;
+    const bh=_getBH();
+    // 曜日別
+    const weeklyRows = [0,1,2,3,4,5,6].map(dow=>{
+      const bw=bh.weekly[dow]||{open:12,close:29};
+      return `<div class="biz-row">
+        <span class="biz-dow">${DOW_LABELS[dow]}</span>
+        <select class="biz-sel" onchange="SettingsApp.setBizWeekly(${dow},'open',this.value)">${_hourOpts(12,28,bw.open)}</select>
+        <span>〜</span>
+        <select class="biz-sel" onchange="SettingsApp.setBizWeekly(${dow},'close',this.value)">${_hourOpts(13,29,bw.close)}</select>
+      </div>`;
+    }).join('');
+    // 休業日
+    const closedTags = (bh.closed||[]).sort().map(d=>
+      `<span class="closed-tag">${d} <span class="rm-btn" onclick="SettingsApp.removeClosedDay('${d}')">×</span></span>`
+    ).join('') || '<span class="empty-hint-sm">休業日なし</span>';
+    // 特定日
+    const specialTags = Object.entries(bh.special||{}).sort().map(([d,v])=>
+      `<span class="special-tag">${d} ${v.open}〜${v.close}時 <span class="rm-btn" onclick="SettingsApp.removeSpecialDay('${d}')">×</span></span>`
+    ).join('') || '<span class="empty-hint-sm">特定日設定なし</span>';
+
+    el.innerHTML=`
+      <div class="biz-section-title">📅 曜日別営業時間</div>
+      <div class="biz-weekly">${weeklyRows}</div>
+      <div class="biz-section-title" style="margin-top:14px">🔴 休業日</div>
+      <div class="biz-add-row">
+        <input type="date" id="closedDateInput" class="form-input" style="flex:1">
+        <button class="add-btn" onclick="SettingsApp.addClosedDay()">追加</button>
+      </div>
+      <div class="tag-list">${closedTags}</div>
+      <div class="biz-section-title" style="margin-top:14px">⭐ 特定日の営業時間</div>
+      <div class="biz-add-row" style="flex-wrap:wrap">
+        <input type="date" id="specialDateInput" class="form-input" style="flex:1;min-width:130px">
+        <select id="specialOpen" class="biz-sel">${_hourOpts(12,28,12)}</select>
+        <span style="line-height:36px">〜</span>
+        <select id="specialClose" class="biz-sel">${_hourOpts(13,29,29)}</select>
+        <button class="add-btn" onclick="SettingsApp.addSpecialDay()">追加</button>
+      </div>
+      <div class="tag-list">${specialTags}</div>`;
+  }
+
+  function setBizWeekly(dow, type, val){
+    const s = Store.getSettings();
+    if(!s.businessHours) s.businessHours = JSON.parse(JSON.stringify(DEFAULT_BIZ_HOURS));
+    if(!s.businessHours.weekly) s.businessHours.weekly = {};
+    if(!s.businessHours.weekly[dow]) s.businessHours.weekly[dow] = {open:12,close:29};
+    s.businessHours.weekly[dow][type] = parseInt(val);
+    Store.dispatch('SET_NOTICE',{notice:s.notice, role});
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved();
+  }
+  function addClosedDay(){
+    const d=document.getElementById('closedDateInput').value;
+    if(!d){toast('日付を選んでください');return;}
+    const s=Store.getSettings();
+    if(!s.businessHours) s.businessHours=JSON.parse(JSON.stringify(DEFAULT_BIZ_HOURS));
+    if(!s.businessHours.closed) s.businessHours.closed=[];
+    if(!s.businessHours.closed.includes(d)) s.businessHours.closed.push(d);
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved(); renderBizHours();
+  }
+  function removeClosedDay(d){
+    const s=Store.getSettings();
+    s.businessHours.closed=(s.businessHours.closed||[]).filter(x=>x!==d);
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved(); renderBizHours();
+  }
+  function addSpecialDay(){
+    const d=document.getElementById('specialDateInput').value;
+    const open=parseInt(document.getElementById('specialOpen').value);
+    const close=parseInt(document.getElementById('specialClose').value);
+    if(!d){toast('日付を選んでください');return;}
+    if(open>=close){toast('終了は開始より後に');return;}
+    const s=Store.getSettings();
+    if(!s.businessHours) s.businessHours=JSON.parse(JSON.stringify(DEFAULT_BIZ_HOURS));
+    if(!s.businessHours.special) s.businessHours.special={};
+    s.businessHours.special[d]={open,close};
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved(); renderBizHours();
+  }
+  function removeSpecialDay(d){
+    const s=Store.getSettings();
+    delete (s.businessHours.special||{})[d];
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved(); renderBizHours();
+  }
+
+  /* ============ 最低人数設定 ============ */
+  function renderMinPeople(){
+    const el=document.getElementById('minPeopleBox');
+    if(!el)return;
+    const mp=_getMP();
+    el.innerHTML=`<div class="min-people-desc">
+      📌 <b>カウントルール</b><br>
+      各時間に「出勤中」の人数をカウントします。<br>
+      例）12〜21時出勤の場合：12〜20時はカウント対象、<b>21時はカウントしない</b>（退勤時間ちょうどは除く）<br>
+      例）12〜5時（29時）出勤の場合：29時（5時）も<b>カウント対象</b>
+    </div>`+TIME_ZONES.map(tz=>`
+      <div class="min-people-row">
+        <span class="min-people-label">${tz.label}</span>
+        <input type="number" class="min-people-input" min="0" max="30"
+          value="${mp[tzMinKey(tz)]||0}"
+          onchange="SettingsApp.setMinPeople('${tzMinKey(tz)}',this.value)">
+        <span class="min-people-unit">人</span>
+      </div>`).join('');
+  }
+  function setMinPeople(key, val){
+    const s=Store.getSettings();
+    if(!s.minPeople) s.minPeople={...DEFAULT_MIN_PEOPLE};
+    s.minPeople[key]=parseInt(val)||0;
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved();
+  }
+
+  /* ============ メールアドレス・PW設定 ============ */
+  function renderEmails(){
+    const staffEl=document.getElementById('staffEmailInput');
+    if(staffEl) staffEl.value=Store.getSettings().staffEmail||'';
+    const staffPwEl=document.getElementById('staffPwInput');
+    if(staffPwEl) staffPwEl.value=Store.getSettings().staffPw||'';
+  }
+  function setStaffEmail(val){
+    const s=Store.getSettings();
+    s.staffEmail=(val||'').trim();
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved();
+  }
+  function setStaffPw(val){
+    const s=Store.getSettings();
+    s.staffPw=(val||'').trim();
+    Store.dispatch('LOAD_MASTER',{settings:s});
+    markUnsaved();
+  }
+
+  return { init, addCast, removeCast, updateCastPw, confirmRemoveCast, renderCastList,
+           toggleCastExpand, toggleStore, setAlias,
+           addStaff, removeStaff, updateStaffColor, confirmRemoveStaff, renderStaffList,
+           saveNotice, sendCastNotice, saveAll,
+           bulkRegenPw,
+           setBizWeekly, addClosedDay, removeClosedDay, addSpecialDay, removeSpecialDay,
+           setMinPeople, setStaffEmail, setStaffPw,
+           renderAll, toast };
+})();
+
+
+function onAddCast(){
+  const name=document.getElementById('newCastName');
+  const pw=document.getElementById('newCastPw');
+  if(!name.value.trim()){ SettingsApp.toast('キャスト名を入力してください'); return; }
+  if(!pw.value){ pw.value=genPw(); }
+  SettingsApp.addCast(name.value, pw.value);
+  name.value=''; pw.value=''; name.focus();
+}
+function genPw(){
+  const used=new Set((Store.getCastList()||[]).map(c=>String(c.pw)));
+  for(let i=0;i<2000;i++){
+    const p=String(Math.floor(100+Math.random()*900));
+    if(!used.has(p)) return p;
+  }
+  return String(Math.floor(100+Math.random()*900));
+}
+document.getElementById('newCastName').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const name=e.target.value.trim();
+    if(!name){ SettingsApp.toast('キャスト名を入力してください'); return; }
+    const pwEl=document.getElementById('newCastPw');
+    pwEl.value=genPw();
+    pwEl.focus();
+  }
+});
+document.getElementById('newCastPw').addEventListener('keydown',e=>{ if(e.key==='Enter')onAddCast(); });
+
+function onAddStaff(){
+  const name=document.getElementById('newStaffName');
+  const color=document.getElementById('newStaffColor');
+  SettingsApp.addStaff(name.value, color.value);
+  name.value=''; name.focus();
+}
+document.getElementById('newStaffName').addEventListener('keydown',e=>{ if(e.key==='Enter')onAddStaff(); });
+
+function onSaveNotice(){ SettingsApp.saveNotice(document.getElementById('noticeInput').value); }
+function onSendCastNotice(){
+  SettingsApp.sendCastNotice(document.getElementById('castNoticeSelect').value, document.getElementById('castNoticeMsg').value);
+}
+
+function toggleAcc(id){ document.getElementById(id).classList.toggle('open'); }
+
+// リセット対象プルダウンにキャスト追加（マスタ読込後）
+function updateResetSelect(){
+  const sel = document.getElementById('resetTarget');
+  if(!sel) return;
+  const list = Store.getCastList();
+  // 全体オプション + キャスト個別
+  sel.innerHTML = '<option value="all">全キャスト（全データ）</option>' +
+    list.map(c=>`<option value="${c.name}">${c.name}のデータのみ</option>`).join('');
+}
+
+// リセットボタン
+document.getElementById('resetBtn').addEventListener('click', async ()=>{
+  const sel = document.getElementById('resetTarget');
+  const target = sel ? sel.value : 'all';
+  const label = target==='all' ? '全キャストの全データ' : target+'さんのデータ';
+  if(!confirm(`⚠️ ${label}を削除します。\nこの操作は元に戻せません。\n本当に削除しますか？`)) return;
+  const result = document.getElementById('resetResult');
+  if(result) result.textContent = '削除中…';
+  try{
+    const body = new FormData();
+    body.append('token', CONFIG.TOKEN);
+    body.append('action', 'resetData');
+    body.append('target', target);
+    const res = await fetch(CONFIG.GAS_URL, {method:'POST', body});
+    const r = await res.json();
+    if(r.success){
+      if(result) result.textContent = `✅ 削除完了（${r.deleted}件削除しました）`;
+      SettingsApp.toast(`${label}を削除しました🗑`);
+    } else {
+      if(result) result.textContent = '❌ 削除に失敗しました: ' + (r.error||'');
+    }
+  }catch(e){
+    if(result) result.textContent = '❌ 通信エラー: ' + e.message;
+  }
+});
+
+window.addEventListener('beforeunload',e=>{
+  const bar=document.getElementById('saveBar');
+  if(bar && bar.classList.contains('show')){ e.preventDefault(); e.returnValue=''; }
+});
+
+// マスタ読込完了後にリセットプルダウンを更新
+const _origInit = SettingsApp.init.bind(SettingsApp);
+SettingsApp.init = async function(opts){
+  await _origInit(opts);
+  updateResetSelect();
+};
+
+// 認証チェック
+if(sessionStorage.getItem('staffAuth')!=='1' && location.hostname!=='localhost' && location.protocol!=='file:'){
+  location.href='index.html';
+}
+
+// チェック画面に戻るボタン
+document.getElementById('settingsBackBtn').addEventListener('click',()=>{
+  const nm = sessionStorage.getItem('staffName') || '';
+  location.href = 'staff.html' + (nm ? '?name='+encodeURIComponent(nm) : '');
+});
+
+document.getElementById('settingsLogoutBtn').addEventListener('click',()=>{
+  sessionStorage.removeItem('staffAuth');
+  sessionStorage.removeItem('staffName');
+  location.href='index.html';
+});
+
+SettingsApp.init({role:'staff'});
+</script>
+</body>
+</html>

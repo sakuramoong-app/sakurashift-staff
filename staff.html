@@ -1428,7 +1428,7 @@ const StaffApp = (function(){
     for(const wk of weeks){
       const w = Store.getWeek(name, wk);
       if(!w) continue;
-      if(!['waiting','inputting','change_inputting'].includes(w.status)) continue;
+      if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       for(const ds of weekDates(wk)){
         if(ds >= today && w.shifts[ds]){ targetDs = ds; break; }
       }
@@ -1480,7 +1480,7 @@ const StaffApp = (function(){
         if(!w) return false;
         if(f==='today'){
           // 本日入力可能 = waiting/inputting/change_inputting かつ今週に今日が含まれる
-          const active = ['waiting','inputting','change_inputting'].includes(w.status);
+          const active = ['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status);
           return active && weekDates(wk).includes(today);
         }
         if(f==='waiting') return w.status==='waiting'||w.status==='inputting';
@@ -1505,7 +1505,7 @@ const StaffApp = (function(){
           const w=Store.getWeek(c.name,wk);
           if(!w)return false;
           if(filter==='today'){
-            const active=['waiting','inputting','change_inputting'].includes(w.status);
+            const active=['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status);
             return active && weekDates(wk).includes(today);
           }
           if(filter==='waiting') return w.status==='waiting'||w.status==='inputting';
@@ -1573,7 +1573,7 @@ const StaffApp = (function(){
     for(const wk of weeks){
       const w=Store.getWeek(name,wk);
       if(!w) continue;
-      if(!['waiting','inputting','change_inputting'].includes(w.status)) continue;
+      if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       for(const ds of weekDates(wk)){
         if(ds>=today&&w.shifts[ds]){targetDs=ds;targetWk=wk;break;}
       }
@@ -1903,7 +1903,7 @@ const StaffApp = (function(){
       const targets = Store.getCastList().filter(c=>{
         return weeksInMonth(viewYM).some(wk=>{
           const w = Store.getWeek(c.name, wk);
-          return w && ['waiting','inputting','change_inputting'].includes(w.status)
+          return w && ['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)
             && weekDates(wk).includes(today);
         });
       });

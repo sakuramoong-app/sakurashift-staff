@@ -1319,21 +1319,6 @@ const StaffApp = (function(){
     });
     if(changed) await StaffGas.flushNow();
   }
-        }
-      });
-      if(vacReqs.length>0){
-        const sorted=[...vacReqs].sort((a,b)=>a.ds.localeCompare(b.ds));
-        const first=sorted[0].ds, last=sorted[sorted.length-1].ds;
-        const memo=sorted[0].memo||'';
-        const d1=new Date(first+'T12:00:00'), d2=new Date(last+'T12:00:00');
-        const label=`${d1.getMonth()+1}/${d1.getDate()}〜${d2.getMonth()+1}/${d2.getDate()}`;
-        castItems.push({cast:c.name,type:'vacation',label,memo,dates:sorted.map(r=>r.ds),sortKey:first});
-      }
-      castItems.sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
-      castItems.forEach(it=>inbox.push(it));
-    });
-    return inbox;
-  }
 
   function renderInbox(){
     const el=document.getElementById('inboxBox');

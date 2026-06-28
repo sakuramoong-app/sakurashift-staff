@@ -126,6 +126,11 @@
   .chk-date{font-size:8px;font-weight:800;color:#3CA876;line-height:1;height:9px;}
   .store-chip-cell.off .chk{visibility:hidden;}
   .store-chip-cell.off .chk-date{visibility:hidden;}
+  /* 過去日付のチェックグレーアウト */
+  .check-row.past-day .chk{opacity:.35;cursor:not-allowed;pointer-events:none;}
+  .check-row.past-day .bulk-cell .chk{opacity:.35;cursor:not-allowed;pointer-events:none;}
+  .check-row.past-day .store-chip-cell.on{opacity:.6;}
+  .check-row.past-day .chk-date{color:#9CAAB5;}
   .store-rest{padding:6px;text-align:center;color:#C4CCD4;font-weight:700;font-size:11px;}
   .row-hidden{display:none !important;}
   @keyframes flashPulse{0%,100%{background:transparent;}40%{background:#D32F2F;}70%{background:#FF6B6B;}}
@@ -1610,7 +1615,9 @@ const StaffApp = (function(){
     }
 
     let rows='';
+    const _today=ymd(new Date());
     ds7.forEach((ds,i)=>{
+      const isPast = ds < _today;
       const sh=w&&w.shifts[ds];
       const isRest=!sh;
       const d=new Date(ds+'T12:00:00');
@@ -1666,7 +1673,7 @@ const StaffApp = (function(){
         storeCells=`<div class="store-grid2"><div class="store-row">${row1}</div><div class="store-row">${row2}</div></div>`;
       }
 
-      rows+=`<div class="check-row ${isRest?'row-rest':''} ${isRest&&hideRest?'row-hidden':''}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
+      rows+=`<div class="check-row ${isRest?'row-rest':''} ${isRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
     });
 
     const isCurrentWeek = wk===currentWeekKey();

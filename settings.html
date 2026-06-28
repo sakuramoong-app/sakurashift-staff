@@ -216,6 +216,28 @@
       <div class="reset-result" id="resetResult"></div>
     </div>
   </div>
+
+  <!-- ★ キャスト配布情報 -->
+  <div class="card acc" id="accDist">
+    <div class="card-title" onclick="toggleAcc('accDist')"><span class="acc-arrow">▼</span><span class="ico" style="background:linear-gradient(135deg,#FFC9DD,#FF9EC0)">📤</span>キャスト配布情報</div>
+    <div class="card-body">
+      <div class="hint" style="margin-bottom:12px">キャストへ送るログイン情報・使い方の文章を自動生成します。</div>
+      <div class="add-row" style="margin-bottom:14px">
+        <select class="form-input" id="distCastSel" style="flex:1" onchange="generateDistMsg()">
+          <option value="">キャストを選択してください</option>
+        </select>
+      </div>
+      <div id="distMsgBox" style="background:#F8FBF9;border:2px solid var(--line);border-radius:12px;
+        padding:14px 16px;font-size:12.5px;line-height:1.9;white-space:pre-wrap;word-break:break-all;
+        min-height:80px;color:var(--text2);font-family:inherit;margin-bottom:10px">
+キャストを選択すると配布文が生成されます</div>
+      <button class="add-btn" id="distCopyBtn" disabled onclick="copyDistMsg()"
+        style="width:100%;padding:12px;font-size:14px;background:linear-gradient(135deg,#FFC9DD,#FF9EC0)">
+        📋 コピーする
+      </button>
+      <div id="distToast" style="display:none;text-align:center;color:var(--mint-deep);font-size:13px;font-weight:800;margin-top:8px">✅ コピーしました！</div>
+    </div>
+  </div>
 </div>
 
 <div class="save-bar" id="saveBar">
@@ -1604,6 +1626,7 @@ const _origInit = SettingsApp.init.bind(SettingsApp);
 SettingsApp.init = async function(opts){
   await _origInit(opts);
   updateResetSelect();
+  updateDistCastSel();
 };
 
 // 認証チェック
@@ -1622,6 +1645,80 @@ document.getElementById('settingsLogoutBtn').addEventListener('click',()=>{
   sessionStorage.removeItem('staffName');
   location.href='index.html';
 });
+
+// ★ キャスト配布情報 生成
+const CAST_BASE_URL = 'https://sakuramoong-app.github.io/sakurashift-cast/';
+
+function generateDistMsg(){
+  const sel = document.getElementById('distCastSel');
+  const name = sel.value;
+  const box = document.getElementById('distMsgBox');
+  const btn = document.getElementById('distCopyBtn');
+  if(!name){
+    box.style.color='var(--text2)';
+    box.textContent='キャストを選択すると配布文が生成されます';
+    btn.disabled=true;
+    return;
+  }
+  // マスタからPW取得
+  const castList = Store.getMaster().castList || [];
+  const cast = castList.find(c=>c.name===name);
+  if(!cast){ btn.disabled=true; return; }
+  const url = CAST_BASE_URL + '?name=' + encodeURIComponent(name);
+  const msg =
+`【SHIFTシステム ログイン情報】
+◆ ${name} さん専用
+━━━━━━━━━━━━━━━
+📱 アプリURL 📱
+${url}
+※URLをタップ後、
+line内ブラウザ画面から「デフォルトブラウザで開く」を選択してください！
+※1つのブラウザだけで使用してください🏋️‍♀️
+※ChromeまたはSafariでの使用を推奨します🏋️‍♀️
+━━━━━━━━━━━━━━━
+🔑 ログイン方法
+・名前：${name}
+・パスワード：${cast.pw}
+━━━━━━━━━━━━━━━
+📅 シフト提出ルール
+・提出期限：毎週土曜17時まで（翌週月曜日〜日曜日のシフト）
+📝 基本的な使い方
+・カレンダーで出勤日をタップして時間を入力してください
+・入力が終わったら「提出」ボタンを押してください
+💡 便利な機能
+・変更リクエスト：提出後に変更したい場合はアプリ内から申請できます
+・長期休暇申請：連続して休む場合はアプリ内から申請できます
+・備考メモ：シフト入力済み・未提出の日付を長押し（0.5秒）するとその日の備考メモを入力できます
+⚠️ パスワードは他の人に教えないでください
+⚠️ バグの報告や追加機能のご希望あれば内勤宛にご連絡ください✨
+━━━━━━━━━━━━━━━`;
+  box.style.color='var(--text)';
+  box.textContent=msg;
+  btn.disabled=false;
+}
+
+async function copyDistMsg(){
+  const text=document.getElementById('distMsgBox').textContent;
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
+    const ta=document.createElement('textarea');
+    ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+  }
+  const t=document.getElementById('distToast');
+  t.style.display='block';
+  setTimeout(()=>t.style.display='none',2000);
+}
+
+// キャスト一覧をdistCastSelに反映（SettingsApp.init後に実行）
+function updateDistCastSel(){
+  const castList=(Store.getMaster().castList||[]).filter(c=>c.name&&c.pw);
+  const sel=document.getElementById('distCastSel');
+  if(!sel)return;
+  sel.innerHTML='<option value="">キャストを選択してください</option>'+
+    castList.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+}
 
 SettingsApp.init({role:'staff'});
 </script>

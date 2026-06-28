@@ -1415,61 +1415,78 @@ const StaffApp = (function(){
     if(!castEl) return;
     const today = ymd(new Date());
     const curWk = weekKeyOf(today);
-    const weeks = [];
+
+    // 未チェック日を探す（今日以降）
+    const castStores = Store.getCastStores(name);
+    const dayStores = ['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
+    const weeks=[];
     for(let i=0;i<3;i++){
       let [y,m]=viewYM.split('-').map(Number);
       m+=i; if(m>12){m-=12;y++;}
-      weeksInMonth(`${y}-${String(m).padStart(2,'0')}`).forEach(wk=>{
-        if(!weeks.includes(wk)) weeks.push(wk);
-      });
+      weeksInMonth(`${y}-${String(m).padStart(2,'0')}`).forEach(wk=>{ if(!weeks.includes(wk)) weeks.push(wk); });
     }
     weeks.sort();
-    let targetDs = null;
+    let targetDs=null;
     for(const wk of weeks){
-      const w = Store.getWeek(name, wk);
+      const w=Store.getWeek(name,wk);
       if(!w) continue;
       if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       for(const ds of weekDates(wk)){
-        if(ds >= today && w.shifts[ds]){ targetDs = ds; break; }
+        if(ds<today) continue;
+        const sh=w.shifts&&w.shifts[ds];
+        if(!sh||sh.start==null) continue;
+        const allChecked=dayStores.length>0&&dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+        if(!allChecked){ targetDs=ds; break; }
       }
       if(targetDs) break;
     }
 
     if(targetDs){
-      // 最短入力可能日の行をくるくる
-      const rows = castEl.querySelectorAll('.check-row');
+      // 最短未チェック日の行にジャンプ＋くるくる
+      const rows=castEl.querySelectorAll('.check-row');
       rows.forEach(row=>{
-        const md = row.querySelector('.d-md');
+        const md=row.querySelector('.d-md');
         if(!md) return;
-        const d = new Date(targetDs+'T12:00:00');
-        const label = `${d.getMonth()+1}/${d.getDate()}`;
+        const d=new Date(targetDs+'T12:00:00');
+        const label=`${d.getMonth()+1}/${d.getDate()}`;
         if(md.textContent.trim()===label){
-          row.scrollIntoView({behavior:'smooth', block:'center'});
+          row.scrollIntoView({behavior:'smooth',block:'center'});
           row.classList.add('row-spin');
-          setTimeout(()=>row.classList.remove('row-spin'), 2400);
+          setTimeout(()=>row.classList.remove('row-spin'),2400);
         }
       });
     } else {
-      // 最短入力可能日がない場合→今週の週ブロックをくるくる
-      const blocks = castEl.querySelectorAll('.week-block');
-      let found = false;
+      // 未チェックなし→今週ブロック全体をくるくる
+      const blocks=castEl.querySelectorAll('.week-block');
+      let found=false;
       blocks.forEach(block=>{
         if(found) return;
-        const rangeEl = block.querySelector('.wk-range');
-        if(rangeEl && rangeEl.textContent.includes(weekLabel(curWk).slice(0,4))){
-          block.scrollIntoView({behavior:'smooth', block:'center'});
+        const rangeEl=block.querySelector('.wk-range');
+        if(rangeEl&&rangeEl.textContent.includes(weekLabel(curWk).slice(0,4))){
+          block.scrollIntoView({behavior:'smooth',block:'center'});
           block.classList.add('row-spin');
-          setTimeout(()=>block.classList.remove('row-spin'), 2400);
-          found = true;
+          setTimeout(()=>block.classList.remove('row-spin'),2400);
+          found=true;
         }
       });
-      // 週ブロックが見つからない場合はキャスト枠の先頭へ
-      if(!found) castEl.scrollIntoView({behavior:'smooth', block:'center'});
+      if(!found) castEl.scrollIntoView({behavior:'smooth',block:'center'});
     }
   }
 
   /* ============ キャスト一覧（アコーディオン） ============ */
   /* ⑤⑥ フィルター件数カウント */
+  /* 今日に未チェックがあるか判定 */
+  function _hasUncheckedToday(castName){
+    const today=ymd(new Date());
+    const wk=weekKeyOf(today);
+    const w=Store.getWeek(castName,wk);
+    if(!w||!w.shifts||!w.shifts[today]||w.shifts[today].start==null) return false;
+    const castStores=Store.getCastStores(castName);
+    const dayStores=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
+    if(dayStores.length===0) return true;
+    return !dayStores.every(m=>w.checks&&w.checks[today+'_'+m]&&w.checks[today+'_'+m].checked);
+  }
+
   function countFilter(f){
     const today = ymd(new Date());
     let count = 0;
@@ -1479,9 +1496,7 @@ const StaffApp = (function(){
         const w = Store.getWeek(c.name, wk);
         if(!w) return false;
         if(f==='today'){
-          // 本日入力可能 = waiting/inputting/change_inputting かつ今週に今日が含まれる
-          const active = ['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status);
-          return active && weekDates(wk).includes(today);
+          return _hasUncheckedToday(c.name);
         }
         if(f==='waiting') return w.status==='waiting'||w.status==='inputting';
         if(f==='change') return w.status==='change_requested';
@@ -1505,8 +1520,7 @@ const StaffApp = (function(){
           const w=Store.getWeek(c.name,wk);
           if(!w)return false;
           if(filter==='today'){
-            const active=['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status);
-            return active && weekDates(wk).includes(today);
+            return _hasUncheckedToday(c.name);
           }
           if(filter==='waiting') return w.status==='waiting'||w.status==='inputting';
           if(filter==='change') return w.status==='change_requested';
@@ -1900,13 +1914,7 @@ const StaffApp = (function(){
     // 本日入力可能：対象キャストのアコーディオンを全部開いてから点滅
     if(f==='today'){
       const today = ymd(new Date());
-      const targets = Store.getCastList().filter(c=>{
-        return weeksInMonth(viewYM).some(wk=>{
-          const w = Store.getWeek(c.name, wk);
-          return w && ['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)
-            && weekDates(wk).includes(today);
-        });
-      });
+      const targets = Store.getCastList().filter(c=>_hasUncheckedToday(c.name));
       // 対象が1件なら開く、複数なら expandedCast はそのまま（全員開くと重い）
       if(targets.length===1) expandedCast = targets[0].name;
       renderCastList();

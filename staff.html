@@ -1265,9 +1265,9 @@ const StaffApp = (function(){
   /* ============ 受信ボックス ============ */
   function collectInbox(){
     const inbox=[];
+    const today=ymd(new Date());
     Store.getCastList().forEach(c=>{
       const castItems = [];
-      // 全週データからvacationRequests・waiting・change_requestedを収集
       const castWeeks = Store.getCastWeeks(c.name);
       const allWks = Object.keys(castWeeks).sort();
       const vacReqs = [];
@@ -1278,11 +1278,47 @@ const StaffApp = (function(){
         if(w.vacationRequests && w.vacationRequests.length){
           w.vacationRequests.forEach(r=>{ if(!vacReqs.find(x=>x.ds===r.ds)) vacReqs.push(r); });
         }
-        // 提出・変更申請
+        // 提出：シフトが全て今日より前なら受信ボックスに出さない（自動確定対象）
         if(w.status==='waiting'){
-          castItems.push({cast:c.name,wk,type:'submit',status:w.status,sortKey:wk});
+          const shiftDates=Object.keys(w.shifts||{});
+          const allPast=shiftDates.length>0 && shiftDates.every(ds=>ds<today);
+          if(!allPast) castItems.push({cast:c.name,wk,type:'submit',status:w.status,sortKey:wk});
         } else if(w.status==='change_requested'){
           castItems.push({cast:c.name,wk,type:'change',status:w.status,changeDates:w.changeRequest||{},sortKey:wk});
+        }
+      });
+      if(vacReqs.length>0){
+        const sorted=[...vacReqs].sort((a,b)=>a.ds.localeCompare(b.ds));
+        const first=sorted[0].ds, last=sorted[sorted.length-1].ds;
+        const memo=sorted[0].memo||'';
+        const d1=new Date(first+'T12:00:00'), d2=new Date(last+'T12:00:00');
+        const label=`${d1.getMonth()+1}/${d1.getDate()}〜${d2.getMonth()+1}/${d2.getDate()}`;
+        castItems.push({cast:c.name,type:'vacation',label,memo,dates:sorted.map(r=>r.ds),sortKey:first});
+      }
+      castItems.sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
+      castItems.forEach(it=>inbox.push(it));
+    });
+    return inbox;
+  }
+
+  /* 過去シフトのwaitingを自動確定（サイレント） */
+  async function autoConfirmPastWeeks(){
+    const today=ymd(new Date());
+    let changed=false;
+    Store.getCastList().forEach(c=>{
+      const castWeeks=Store.getCastWeeks(c.name);
+      Object.entries(castWeeks).forEach(([wk,w])=>{
+        if(!w || w.status!=='waiting') return;
+        const shiftDates=Object.keys(w.shifts||{});
+        const allPast=shiftDates.length>0 && shiftDates.every(ds=>ds<today);
+        if(allPast){
+          Store.dispatch('CONFIRM_WEEK',{cast:c.name,wk,by:'auto'});
+          changed=true;
+        }
+      });
+    });
+    if(changed) await StaffGas.flushNow();
+  }
         }
       });
       if(vacReqs.length>0){
@@ -2343,6 +2379,9 @@ KANA_GROUPS.forEach(g=>{
   if(monthLbl)monthLbl.textContent=ym[0]+'年 '+Number(ym[1])+'月';
 
   await StaffApp.init({role:'staff', staffName: nameFromUrl});
+
+  // 過去シフトのwaitingを自動確定（受信ボックスを整理）
+  await autoConfirmPastWeeks();
 
   const sel=document.getElementById('staffSelect');
   const staff=Store.getStaffList();

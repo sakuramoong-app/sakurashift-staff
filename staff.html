@@ -123,14 +123,13 @@
   .chk{width:19px;height:19px;border-radius:6px;border:2px solid #D6DEE6;background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:all .12s;}
   .chk:hover{border-color:var(--pink);transform:scale(1.08);}
   .chk.checked{border-color:transparent;box-shadow:0 2px 6px rgba(255,158,192,.4);}
-  .chk-date{font-size:8px;font-weight:800;color:#3CA876;line-height:1;height:9px;}
-  .store-chip-cell.off .chk{visibility:hidden;}
-  .store-chip-cell.off .chk-date{visibility:hidden;}
-  /* 過去日付のチェックグレーアウト */
   .check-row.past-day .chk{opacity:.35;cursor:not-allowed;pointer-events:none;}
   .check-row.past-day .bulk-cell .chk{opacity:.35;cursor:not-allowed;pointer-events:none;}
   .check-row.past-day .store-chip-cell.on{opacity:.6;}
   .check-row.past-day .chk-date{color:#9CAAB5;}
+  .chk-date{font-size:8px;font-weight:800;color:#3CA876;line-height:1;height:9px;}
+  .store-chip-cell.off .chk{visibility:hidden;}
+  .store-chip-cell.off .chk-date{visibility:hidden;}
   .store-rest{padding:6px;text-align:center;color:#C4CCD4;font-weight:700;font-size:11px;}
   .row-hidden{display:none !important;}
   @keyframes flashPulse{0%,100%{background:transparent;}40%{background:#D32F2F;}70%{background:#FF6B6B;}}
@@ -257,7 +256,7 @@
     <select class="staff-select" id="staffSelect" onchange="StaffApp.setStaffName(this.value)"></select>
     <span class="save-state" id="staffSaveState">✅ 保存済み</span>
     <button class="btn btn-soft" onclick="StaffApp.sync()">🔄 同期</button>
-    <button class="btn btn-soft" onclick="goToSettings()" title="マスタ設定">⚙️ 設定</button>
+    <button class="btn btn-soft" onclick="window.goToSettings()" title="マスタ設定">⚙️ 設定</button>
     <button class="btn btn-soft" id="staffLogoutBtn" style="color:#E05260;border-color:#FFB9B9">ログアウト</button>
   </div>
 </div>
@@ -1265,7 +1264,7 @@ const StaffApp = (function(){
   /* ============ 受信ボックス ============ */
   function collectInbox(){
     const inbox=[];
-    const today=ymd(new Date());
+    const _inboxToday=ymd(new Date());
     Store.getCastList().forEach(c=>{
       const castItems = [];
       const castWeeks = Store.getCastWeeks(c.name);
@@ -1278,10 +1277,10 @@ const StaffApp = (function(){
         if(w.vacationRequests && w.vacationRequests.length){
           w.vacationRequests.forEach(r=>{ if(!vacReqs.find(x=>x.ds===r.ds)) vacReqs.push(r); });
         }
-        // 提出：シフトが全て今日より前なら受信ボックスに出さない（自動確定対象）
+        // 提出：シフトが全て今日より前なら受信ボックスに出さない
         if(w.status==='waiting'){
           const shiftDates=Object.keys(w.shifts||{});
-          const allPast=shiftDates.length>0 && shiftDates.every(ds=>ds<today);
+          const allPast=shiftDates.length>0&&shiftDates.every(ds=>ds<_inboxToday);
           if(!allPast) castItems.push({cast:c.name,wk,type:'submit',status:w.status,sortKey:wk});
         } else if(w.status==='change_requested'){
           castItems.push({cast:c.name,wk,type:'change',status:w.status,changeDates:w.changeRequest||{},sortKey:wk});
@@ -1308,13 +1307,10 @@ const StaffApp = (function(){
     Store.getCastList().forEach(c=>{
       const castWeeks=Store.getCastWeeks(c.name);
       Object.entries(castWeeks).forEach(([wk,w])=>{
-        if(!w || w.status!=='waiting') return;
+        if(!w||w.status!=='waiting') return;
         const shiftDates=Object.keys(w.shifts||{});
-        const allPast=shiftDates.length>0 && shiftDates.every(ds=>ds<today);
-        if(allPast){
-          Store.dispatch('CONFIRM_WEEK',{cast:c.name,wk,by:'auto'});
-          changed=true;
-        }
+        const allPast=shiftDates.length>0&&shiftDates.every(ds=>ds<today);
+        if(allPast){ Store.dispatch('CONFIRM_WEEK',{cast:c.name,wk,by:'auto'}); changed=true; }
       });
     });
     if(changed) await StaffGas.flushNow();
@@ -1636,9 +1632,9 @@ const StaffApp = (function(){
     }
 
     let rows='';
-    const _today=ymd(new Date());
+    const _today_check=ymd(new Date());
     ds7.forEach((ds,i)=>{
-      const isPast = ds < _today;
+      const isPast=ds<_today_check;
       const sh=w&&w.shifts[ds];
       const isRest=!sh;
       const d=new Date(ds+'T12:00:00');
@@ -2299,8 +2295,7 @@ const StaffApp = (function(){
   return {
     init, setStaffName, jumpToCast, toggleCast,
     toggleCheck, toggleDayAll, fillRemaining,
-    confirmWeek, acceptChange, rejectChange,
-    autoConfirmPastWeeks,
+    confirmWeek, acceptChange, rejectChange, autoConfirmPastWeeks,
     acceptVacation, rejectVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,
@@ -2348,12 +2343,11 @@ KANA_GROUPS.forEach(g=>{
   const urlParams = new URLSearchParams(location.search);
   const nameFromUrl = urlParams.get('name') || sessionStorage.getItem('staffName') || '';
   const authOk = sessionStorage.getItem('staffAuth')==='1';
-  // 認証なしでアクセスされた場合はハブ画面へ
   if(!authOk && location.hostname !== 'localhost' && location.protocol !== 'file:'){
     location.href = 'index.html';
   }
 
-  // ⚙️ 設定画面へ移動（グローバルスコープに置く）
+  // ⚙️ 設定画面へ移動（グローバル）
   window.goToSettings = function(){
     const cur = document.getElementById('staffSelect');
     const nm = (cur && cur.value) || sessionStorage.getItem('staffName') || '';
@@ -2366,7 +2360,7 @@ KANA_GROUPS.forEach(g=>{
 
   await StaffApp.init({role:'staff', staffName: nameFromUrl});
 
-  // 過去シフトのwaitingを自動確定（受信ボックスを整理）
+  // 過去waitingを自動確定
   await StaffApp.autoConfirmPastWeeks();
 
   const sel=document.getElementById('staffSelect');

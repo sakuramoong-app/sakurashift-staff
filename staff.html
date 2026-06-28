@@ -1397,16 +1397,12 @@ const StaffApp = (function(){
   function _spinRow(name, ds){
     const castEl = document.getElementById('cast-'+cssEscape(name));
     if(!castEl) return;
-    const d = new Date(ds+'T12:00:00');
-    const label = `${d.getMonth()+1}/${d.getDate()}`;
-    const rows = castEl.querySelectorAll('.check-row');
-    rows.forEach(row=>{
-      const md = row.querySelector('.d-md');
-      if(!md || md.textContent.trim()!==label) return;
-      row.scrollIntoView({behavior:'smooth', block:'center'});
-      row.classList.add('row-spin');
-      setTimeout(()=>row.classList.remove('row-spin'), 2400);
-    });
+    const targetRow = castEl.querySelector(`.check-row[data-ds="${ds}"]`);
+    if(targetRow){
+      targetRow.scrollIntoView({behavior:'smooth', block:'center'});
+      targetRow.classList.add('row-spin');
+      setTimeout(()=>targetRow.classList.remove('row-spin'), 2400);
+    }
   }
 
   // 最短入力可能日の行全体をメタリックピンクでくるくる3周
@@ -1442,34 +1438,23 @@ const StaffApp = (function(){
     }
 
     if(targetDs){
-      // 最短未チェック日の行にジャンプ＋くるくる
-      const rows=castEl.querySelectorAll('.check-row');
-      rows.forEach(row=>{
-        const md=row.querySelector('.d-md');
-        if(!md) return;
-        const d=new Date(targetDs+'T12:00:00');
-        const label=`${d.getMonth()+1}/${d.getDate()}`;
-        if(md.textContent.trim()===label){
-          row.scrollIntoView({behavior:'smooth',block:'center'});
-          row.classList.add('row-spin');
-          setTimeout(()=>row.classList.remove('row-spin'),2400);
-        }
-      });
+      // 最短未チェック日の行にジャンプ＋くるくる（data-ds で確実マッチ）
+      const targetRow=castEl.querySelector(`.check-row[data-ds="${targetDs}"]`);
+      if(targetRow){
+        targetRow.scrollIntoView({behavior:'smooth',block:'center'});
+        targetRow.classList.add('row-spin');
+        setTimeout(()=>targetRow.classList.remove('row-spin'),2400);
+      }
     } else {
-      // 未チェックなし→今週ブロック全体をくるくる
-      const blocks=castEl.querySelectorAll('.week-block');
-      let found=false;
-      blocks.forEach(block=>{
-        if(found) return;
-        const rangeEl=block.querySelector('.wk-range');
-        if(rangeEl&&rangeEl.textContent.includes(weekLabel(curWk).slice(0,4))){
-          block.scrollIntoView({behavior:'smooth',block:'center'});
-          block.classList.add('row-spin');
-          setTimeout(()=>block.classList.remove('row-spin'),2400);
-          found=true;
-        }
-      });
-      if(!found) castEl.scrollIntoView({behavior:'smooth',block:'center'});
+      // 未チェックなし→今週ブロック全体をくるくる（data-wk で確実マッチ）
+      const curBlock=castEl.querySelector(`.week-block[data-wk="${curWk}"]`);
+      if(curBlock){
+        curBlock.scrollIntoView({behavior:'smooth',block:'center'});
+        curBlock.classList.add('row-spin');
+        setTimeout(()=>curBlock.classList.remove('row-spin'),2400);
+      } else {
+        castEl.scrollIntoView({behavior:'smooth',block:'center'});
+      }
     }
   }
 
@@ -1667,7 +1652,7 @@ const StaffApp = (function(){
       const dateCell=`<div class="day-fixed ${isRest?'rest':''} ${vacation?'day-vacation':''}">
         <div class="day-date"><span class="d-md">${md}</span><span class="d-dow ${dcls}">(${dows[i]})</span></div>
         ${vacation
-          ? `<div class="vacation-label">🏖 ${esc(vacation.memo||'休暇')}</div>`
+          ? `<div class="vacation-label">🏖 ${esc(vacation.memo||'休暇')} <span onclick="event.stopPropagation();StaffApp.cancelVacationDay('${esc(c.name)}','${wk}','${ds}')" title="取り消し" style="cursor:pointer;color:#E05260;font-weight:900;margin-left:4px;">✕</span></div>`
           : vacReq
             ? `<div class="vacation-req-label">🏖 申請中</div>`
             : sh
@@ -1709,7 +1694,7 @@ const StaffApp = (function(){
         storeCells=`<div class="store-grid2"><div class="store-row">${row1}</div><div class="store-row">${row2}</div></div>`;
       }
 
-      rows+=`<div class="check-row ${isRest?'row-rest':''} ${isRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
+      rows+=`<div class="check-row ${isRest?'row-rest':''} ${isRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''}" data-ds="${ds}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
     });
 
     const isCurrentWeek = wk===currentWeekKey();
@@ -1719,7 +1704,7 @@ const StaffApp = (function(){
     if(aliasGm) aliasBadges+=`<span class="alias-badge gm">極:${esc(aliasGm)}</span>`;
     if(alias18) aliasBadges+=`<span class="alias-badge n18">18:${esc(alias18)}</span>`;
     const staffMemo=(w&&w.staffMemo)||'';
-    return `<div class="week-block">
+    return `<div class="week-block" data-wk="${wk}">
       <div class="week-head">
         <span class="week-label ${isCurrentWeek?'current':''}">
           <span class="wk-cast-name">${esc(c.name)}</span>${aliasBadges}
@@ -1858,6 +1843,15 @@ const StaffApp = (function(){
     await saveNow();
     StaffGas.notify(cast,'vacation_rejected',`長期休暇申請（${dates[0]}〜${dates[dates.length-1]}）は承認されませんでした`);
     toast(`${cast}さんの長期休暇申請を却下しました`);
+  }
+
+  async function cancelVacationDay(cast, wk, ds){
+    if(!confirm(`${cast}さんの${ds}の長期休暇を取り消しますか？`))return;
+    const r=Store.dispatch('CANCEL_VACATION',{cast, wk, dates:[ds]});
+    if(r.error){ toast(errorMessage(r.error)); return; }
+    renderAll();
+    await saveNow();
+    toast(`${cast}さんの${ds}の長期休暇を取り消しました`);
   }
 
   /* ---------- 保存 ---------- */
@@ -2328,7 +2322,7 @@ const StaffApp = (function(){
     init, setStaffName, jumpToCast, toggleCast,
     toggleCheck, toggleDayAll, fillRemaining,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks,
-    acceptVacation, rejectVacation,
+    acceptVacation, rejectVacation, cancelVacationDay,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,
     initHeadcount, renderHeadcount, switchHcTab, toggleHcDetail,

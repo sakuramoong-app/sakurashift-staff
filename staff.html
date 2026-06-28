@@ -2315,6 +2315,7 @@ const StaffApp = (function(){
     init, setStaffName, jumpToCast, toggleCast,
     toggleCheck, toggleDayAll, fillRemaining,
     confirmWeek, acceptChange, rejectChange,
+    autoConfirmPastWeeks,
     acceptVacation, rejectVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,
@@ -2381,7 +2382,7 @@ KANA_GROUPS.forEach(g=>{
   await StaffApp.init({role:'staff', staffName: nameFromUrl});
 
   // 過去シフトのwaitingを自動確定（受信ボックスを整理）
-  await autoConfirmPastWeeks();
+  await StaffApp.autoConfirmPastWeeks();
 
   const sel=document.getElementById('staffSelect');
   const staff=Store.getStaffList();

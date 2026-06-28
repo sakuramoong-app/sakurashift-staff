@@ -40,6 +40,8 @@
   .inbox-card{background:#fff;border-radius:16px;padding:14px 16px;margin-bottom:14px;box-shadow:0 3px 12px var(--shadow);border:2px solid var(--lemon);}
   .inbox-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:7px;}
   .inbox-range{font-size:11px;color:var(--text2);font-weight:600;margin-left:2px;}
+  .inbox-bulk-btn{margin-left:auto;padding:5px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-size:11.5px;font-weight:800;cursor:pointer;font-family:inherit;display:none;}
+  .inbox-bulk-btn.show{display:inline-block;}
   .inbox-badge{background:var(--pink-deep);color:#fff;font-size:11px;font-weight:800;border-radius:10px;padding:1px 9px;}
   .inbox-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:11px;background:#FFFCF4;margin-bottom:6px;cursor:pointer;transition:background .15s;border:1.5px solid #FBEFC9;}
   .inbox-item:hover{background:#FFF6E0;}
@@ -284,7 +286,7 @@
     </div>
 
     <div class="inbox-card">
-      <div class="inbox-title">📥 受信ボックス <span class="inbox-badge" id="inboxCount">0</span><span class="inbox-range">（全期間）</span></div>
+      <div class="inbox-title">📥 受信ボックス <span class="inbox-badge" id="inboxCount">0</span><span class="inbox-range">（全期間）</span><button class="inbox-bulk-btn" id="inboxBulkBtn" onclick="StaffApp.bulkConfirmAll()">✅ 提出済みを一括確定</button></div>
       <div id="inboxBox"></div>
     </div>
 
@@ -1322,6 +1324,9 @@ const StaffApp = (function(){
     const items=collectInbox();
     const badge=document.getElementById('inboxCount');
     if(badge) badge.textContent=items.length;
+    const bulkBtn=document.getElementById('inboxBulkBtn');
+    const submitCount=items.filter(it=>it.type==='submit').length;
+    if(bulkBtn) bulkBtn.classList.toggle('show', submitCount>0);
     if(!items.length){ el.innerHTML='<div class="inbox-empty">✨ 未処理の提出はありません</div>'; return; }
     el.innerHTML=items.map(it=>{
       const isChange=it.type==='change';
@@ -1769,6 +1774,25 @@ const StaffApp = (function(){
     renderCastList();
     autoSave();
     toast(count>0?count+'件を一括チェックしました✅':'すでに全部チェック済みです');
+  }
+
+  /* 一括確定（waitingのみ・change_requestedは対象外） */
+  async function bulkConfirmAll(){
+    const items=collectInbox().filter(it=>it.type==='submit');
+    if(items.length===0){ toast('確定できる提出がありません'); return; }
+    if(!confirm(`受信ボックスの提出済み ${items.length}件 を一括確定します。\n変更申請・長期休暇申請は対象外です。\nよろしいですか？`)) return;
+    let done=0;
+    items.forEach(it=>{
+      const r=Store.dispatch('CONFIRM_WEEK',{cast:it.cast,wk:it.wk,by:staffName});
+      if(!r.error) done++;
+    });
+    renderAll();
+    await saveNow();
+    // 各キャストに通知（まとめて送る）
+    items.forEach(it=>{
+      StaffGas.notify(it.cast,'done',weekLabel(it.wk)+' のシフトが確定しました');
+    });
+    toast(`${done}件を一括確定しました✅`);
   }
 
   async function confirmWeek(cast, wk){
@@ -2295,7 +2319,7 @@ const StaffApp = (function(){
   return {
     init, setStaffName, jumpToCast, toggleCast,
     toggleCheck, toggleDayAll, fillRemaining,
-    confirmWeek, acceptChange, rejectChange, autoConfirmPastWeeks,
+    confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks,
     acceptVacation, rejectVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,

@@ -558,12 +558,15 @@ function weekTouchesMonth(weekKey, yearMonth){
 }
 
 function weeksInMonth(yearMonth){
+  // A方式：週の月曜日（週キー）が属する月の週だけを返す（月またぎ週は片方の月にだけ出す）
   const [y,m] = yearMonth.split('-').map(Number);
   const first = new Date(y, m-1, 1, 12,0,0);
   const last  = new Date(y, m,   0, 12,0,0);
   const out = new Set();
   for(let d=new Date(first); d<=last; d.setDate(d.getDate()+1)){
-    out.add(weekKeyOf(ymd(d)));
+    const wk = weekKeyOf(ymd(d));
+    // 週キー（月曜日）が yearMonth と同じ月のものだけ採用
+    if(wk.slice(0,7) === yearMonth) out.add(wk);
   }
   return [...out].sort();
 }

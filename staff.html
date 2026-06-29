@@ -1200,6 +1200,20 @@ const StaffGas = {
   async notify(castName, type, message){
     try{
       await this._post({action:'addNotification', role:'cast', castName, type, message});
+      // メール送信（キャストへ：メールアドレス未登録なら無視される）
+      this._post({action:'sendEmail', toRole:'cast', toCast:castName,
+        subject:'【サクラシフト】'+message,
+        htmlBody:'<div style="font-family:-apple-system,sans-serif;padding:20px;max-width:480px;margin:0 auto">'
+          +'<div style="background:linear-gradient(135deg,#A7E8C8,#5FD0A0);border-radius:14px;padding:16px 20px;margin-bottom:18px">'
+          +'<span style="font-size:22px">🌸</span>'
+          +'<span style="font-size:16px;font-weight:800;color:#fff;margin-left:10px">サクラシフト</span>'
+          +'</div>'
+          +'<p style="font-size:15px;color:#4A5560;margin:0 0 12px">'+castName+'さん、</p>'
+          +'<div style="background:#F0FBF4;border-radius:12px;padding:14px 16px;font-size:14px;color:#4A5560;margin-bottom:18px">'+message+'</div>'
+          +'<p style="font-size:12px;color:#9CAAB5;border-top:1px solid #E4F4EC;padding-top:12px;margin:0">'
+          +'このメールはサクラシフトから自動送信されています</p>'
+          +'</div>'
+      }).catch(()=>{});
     }catch(e){ console.warn('通知送信エラー',e); }
   },
   async loadStaffNotes(weeks){

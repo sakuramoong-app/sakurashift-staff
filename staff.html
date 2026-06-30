@@ -1806,13 +1806,21 @@ const StaffApp = (function(){
   }
 
   async function confirmWeek(cast, wk){
+    // 確定前のステータスで「変更後の確定」かを判定
+    const wBefore = Store.getWeek(cast, wk);
+    const wasChange = wBefore && (wBefore.status==='change_inputting' || wBefore.status==='change_requested');
     const r=Store.dispatch('CONFIRM_WEEK',{cast,wk,by:staffName});
     if(r.error){ toast(errorMessage(r.error)); return; }
     renderAll();
     await saveNow();
-    // ★ 確定通知（既存）
-    StaffGas.notify(cast,'done',weekLabel(wk)+' のシフトが確定しました');
-    toast(cast+'さんの'+weekLabel(wk)+'を確定しました✅');
+    // ★ 文言を分ける：変更後の確定か通常の確定か
+    if(wasChange){
+      StaffGas.notify(cast,'change_done',weekLabel(wk)+' の変更が承認され、シフトが更新されました');
+      toast(cast+'さんの'+weekLabel(wk)+'を更新・確定しました✅');
+    } else {
+      StaffGas.notify(cast,'done',weekLabel(wk)+' のシフトが確定しました');
+      toast(cast+'さんの'+weekLabel(wk)+'を確定しました✅');
+    }
   }
 
   async function acceptChange(cast, wk){

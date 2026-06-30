@@ -1800,7 +1800,7 @@ const StaffApp = (function(){
     await saveNow();
     // 各キャストに通知（まとめて送る）
     items.forEach(it=>{
-      StaffGas.notify(it.cast,'done',weekLabel(it.wk)+' のシフトが確定しました');
+      StaffGas.notify(it.cast,'done','シフトが確定しました');
     });
     toast(`${done}件を一括確定しました✅`);
   }
@@ -1815,10 +1815,10 @@ const StaffApp = (function(){
     await saveNow();
     // ★ 文言を分ける：変更後の確定か通常の確定か
     if(wasChange){
-      StaffGas.notify(cast,'change_done',weekLabel(wk)+' の変更が承認され、シフトが更新されました');
+      StaffGas.notify(cast,'change_done','変更申請が受理されました');
       toast(cast+'さんの'+weekLabel(wk)+'を更新・確定しました✅');
     } else {
-      StaffGas.notify(cast,'done',weekLabel(wk)+' のシフトが確定しました');
+      StaffGas.notify(cast,'done','シフトが確定しました');
       toast(cast+'さんの'+weekLabel(wk)+'を確定しました✅');
     }
   }
@@ -1829,7 +1829,7 @@ const StaffApp = (function(){
     renderAll();
     await saveNow();
     // ★ 変更受理通知（新規追加）
-    StaffGas.notify(cast,'change',weekLabel(wk)+' の変更申請を受理しました。修正後に確定します');
+    StaffGas.notify(cast,'change','変更申請を確認中です');
     toast('受理しました。内容を修正して「変更を反映して確定」を押してください');
   }
 
@@ -1840,7 +1840,7 @@ const StaffApp = (function(){
     renderAll();
     await saveNow();
     // ★ 却下通知（既存）
-    StaffGas.notify(cast,'reject',weekLabel(wk)+' の変更リクエストは承認されませんでした');
+    StaffGas.notify(cast,'reject','変更申請が否認されました');
     toast('却下しました（元のシフトのまま）');
   }
 
@@ -1850,7 +1850,7 @@ const StaffApp = (function(){
     if(r.error){ toast(errorMessage(r.error)); return; }
     renderAll();
     await saveNow();
-    StaffGas.notify(cast,'vacation_accepted',`長期休暇（${dates[0]}〜${dates[dates.length-1]}）が承認されました${memo?'（'+memo+'）':''}`);
+    StaffGas.notify(cast,'vacation_accepted','長期休暇が承認されました');
     toast(`${cast}さんの長期休暇を受理しました✅`);
   }
 
@@ -1860,7 +1860,7 @@ const StaffApp = (function(){
     if(r.error){ toast(errorMessage(r.error)); return; }
     renderAll();
     await saveNow();
-    StaffGas.notify(cast,'vacation_rejected',`長期休暇申請（${dates[0]}〜${dates[dates.length-1]}）は承認されませんでした`);
+    StaffGas.notify(cast,'vacation_rejected','長期休暇申請が否認されました');
     toast(`${cast}さんの長期休暇申請を却下しました`);
   }
 

@@ -1584,8 +1584,8 @@ function toggleAcc(id){ document.getElementById(id).classList.toggle('open'); }
 function updateResetSelect(){
   const sel = document.getElementById('resetTarget');
   if(!sel) return;
-  const list = Store.getCastList();
-  // 全体オプション + キャスト個別
+  const list = [...Store.getCastList()].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+  // 全体オプション + キャスト個別（あいうえお順）
   sel.innerHTML = '<option value="all">全キャスト（全データ）</option>' +
     list.map(c=>`<option value="${c.name}">${c.name}のデータのみ</option>`).join('');
 }
@@ -1718,7 +1718,7 @@ async function copyDistMsg(){
 
 // キャスト一覧をdistCastSelに反映（SettingsApp.init後に実行）
 function updateDistCastSel(){
-  const castList=(Store.getMaster().castList||[]).filter(c=>c.name&&c.pw);
+  const castList=(Store.getMaster().castList||[]).filter(c=>c.name&&c.pw).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
   const sel=document.getElementById('distCastSel');
   if(!sel)return;
   sel.innerHTML='<option value="">キャストを選択してください</option>'+

@@ -1147,18 +1147,52 @@ const Store = (function(){
 
 /* ---------- GASブリッジ（内勤用） ---------- */
 const StaffGas = {
+  // ★ リトライ付きfetch（GAS応答の一時的な不安定さに対応）
+  async _fetchWithRetry(url, options, maxRetries=2){
+    let lastErr;
+    for(let attempt=0; attempt<=maxRetries; attempt++){
+      try{
+        const ctrl = new AbortController();
+        const timer = setTimeout(()=>ctrl.abort(), 15000);
+        const res = await fetch(url, Object.assign({}, options, {signal:ctrl.signal}));
+        clearTimeout(timer);
+        const text = await res.text();
+        if(text.trim().startsWith('<')){ throw new Error('GAS_HTML_ERROR'); }
+        return JSON.parse(text);
+      }catch(e){
+        lastErr = e;
+        if(attempt < maxRetries){
+          // リトライ中は「混雑中」メッセージに切り替え
+          try{
+            const lt=document.getElementById('loadingText');
+            if(lt) lt.textContent='サーバーが混雑しています。再試行中…';
+            const cl=document.querySelector('.cal-loading');
+            if(cl) cl.innerHTML='<span class="spinner"></span>🌸 混雑中、再試行しています…';
+          }catch(_){}
+          await new Promise(r=>setTimeout(r, 1000*(attempt+1)));
+        }
+      }
+    }
+    throw lastErr;
+  },
   async _get(params){
-    const p = Object.assign({token:CONFIG.TOKEN, _t:Date.now()}, params);
+    const sess = sessionStorage.getItem('staffSession') || '';
+    const p = Object.assign({token:CONFIG.TOKEN, session:sess, _t:Date.now()}, params);
     const qs = new URLSearchParams(p).toString();
-    const res = await fetch(CONFIG.GAS_URL + '?' + qs);
-    return res.json();
+    return this._fetchWithRetry(CONFIG.GAS_URL + '?' + qs, {});
   },
   async _post(params){
-    const body = new FormData();
-    for(const k in params) body.append(k, params[k]);
-    body.append('token', CONFIG.TOKEN);
-    const res = await fetch(CONFIG.GAS_URL, {method:'POST', body});
-    return res.json();
+    const buildBody = ()=>{
+      const body = new FormData();
+      for(const k in params) body.append(k, params[k]);
+      body.append('token', CONFIG.TOKEN);
+      body.append('session', sessionStorage.getItem('staffSession') || '');
+      return body;
+    };
+    // 冪等な操作のみリトライ（saveWeek/saveMaster/通知系）
+    const idempotent = ['saveWeek','saveMaster','addNotification','sendEmail','saveStaffNotes','saveRecruitInfo'].includes(params.action);
+    const retries = idempotent ? 2 : 0;
+    return this._fetchWithRetry(CONFIG.GAS_URL, {method:'POST', body:buildBody()}, retries);
   },
   async loadMaster(){
     try{
@@ -2439,8 +2473,29 @@ KANA_GROUPS.forEach(g=>{
   if(logoutBtn2) logoutBtn2.addEventListener('click',()=>{
     sessionStorage.removeItem('staffAuth');
     sessionStorage.removeItem('staffName');
+    sessionStorage.removeItem('staffSession');
     location.href='index.html';
   });
+
+  // ★ 自動ログアウト（30分無操作で即ログアウト）
+  (function(){
+    const IDLE_LIMIT = 30 * 60 * 1000; // 30分
+    let idleTimer = null;
+    function resetIdle(){
+      if(idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(()=>{
+        sessionStorage.removeItem('staffAuth');
+        sessionStorage.removeItem('staffName');
+        sessionStorage.removeItem('staffSession');
+        alert('30分間操作がなかったため、自動ログアウトしました。');
+        location.href='index.html';
+      }, IDLE_LIMIT);
+    }
+    ['click','keydown','touchstart','scroll'].forEach(ev=>{
+      document.addEventListener(ev, resetIdle, {passive:true});
+    });
+    resetIdle();
+  })();
 })();
 </script>
 </body>

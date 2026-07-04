@@ -63,8 +63,7 @@ async function sha256(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-// マスタからスタッフ一覧と内勤PWハッシュを取得
-let staffPwHash=null;
+// スタッフ名一覧のみ取得（PWはブラウザに読み込まない）
 (async()=>{
   try{
     const qs=new URLSearchParams({token:TOKEN,action:'loadMaster',_t:Date.now()}).toString();
@@ -72,8 +71,6 @@ let staffPwHash=null;
     const data=await res.json();
     const master=data.master||{};
     const staffList=master.staffList||[];
-    const staffPw=(master.settings&&master.settings.staffPw)||'';
-    staffPwHash=staffPw?await sha256(staffPw):null;
     const sel=document.getElementById('staffSel');
     sel.innerHTML='<option value="">選択してください</option>'+
       staffList.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
@@ -93,21 +90,30 @@ async function doLogin(){
   if(!pw){err.textContent='パスワードを入力してください';err.style.display='block';return;}
 
   loading.style.display='block';
-  const hash=await sha256(pw);
-  loading.style.display='none';
+  try{
+    const hash=await sha256(pw);
+    // GAS側で照合（PWはブラウザに保持しない）
+    const qs=new URLSearchParams({token:TOKEN,action:'login',role:'staff',name:name,pwHash:hash,_t:Date.now()}).toString();
+    const res=await fetch(GAS_URL+'?'+qs);
+    const data=await res.json();
+    loading.style.display='none';
 
-  if(!staffPwHash){
-    // PWが未設定の場合は仮ログイン（設定画面で設定してもらう）
-    go(name);
-    return;
-  }
-  if(hash===staffPwHash){
-    go(name);
-  }else{
-    err.textContent='パスワードが違います';
+    if(data.success){
+      sessionStorage.setItem('staffSession',data.session);
+      if(data.setup){
+        alert('内勤パスワードが未設定です。ログイン後、設定画面でパスワードを設定してください。');
+      }
+      go(name);
+    } else {
+      err.textContent=data.message||'ログインに失敗しました';
+      err.style.display='block';
+      document.getElementById('pwInput').value='';
+      document.getElementById('pwInput').focus();
+    }
+  }catch(e){
+    loading.style.display='none';
+    err.textContent='通信エラーが発生しました。もう一度お試しください';
     err.style.display='block';
-    document.getElementById('pwInput').value='';
-    document.getElementById('pwInput').focus();
   }
 }
 

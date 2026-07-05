@@ -1678,15 +1678,22 @@ const StaffApp = (function(){
 
     let crInfo='';
     if(w && w.changeRequest && (st==='change_requested'||st==='change_inputting')){
-      const lines=Object.keys(w.changeRequest).map(ds=>{
+      const keys=Object.keys(w.changeRequest);
+      // 全日の理由を集める
+      const reasons=keys.map(ds=>(w.changeRequest[ds]&&w.changeRequest[ds].reason||'').trim()).filter(Boolean);
+      const uniqueReasons=[...new Set(reasons)];
+      const allSame = uniqueReasons.length===1 && reasons.length===keys.length;
+
+      const lines=keys.map(ds=>{
         const ch=w.changeRequest[ds];
         const d=new Date(ds+'T12:00:00');
         const label=ch.type==='holiday'?'お休みに変更':`${fmtShift(ch.start,ch.end)}に変更`;
-        return `${d.getMonth()+1}/${d.getDate()}(${dows[(d.getDay()+6)%7]}) → ${label}`;
+        // 理由がバラバラなら各行に理由を添える
+        const perReason = (!allSame && ch.reason) ? ` <span style="color:#C71585">（理由：${esc(ch.reason)}）</span>` : '';
+        return `${d.getMonth()+1}/${d.getDate()}(${dows[(d.getDay()+6)%7]}) → ${label}${perReason}`;
       });
-      // 理由（どれか1件に入っていれば表示）
-      const reasonCh = Object.values(w.changeRequest).find(ch=>ch&&ch.reason);
-      const reasonLine = reasonCh ? `<br>📝 理由：${esc(reasonCh.reason)}` : '';
+      // 全日同じ理由なら最後に1つだけまとめて表示
+      const reasonLine = allSame ? `<br>📝 理由：${esc(uniqueReasons[0])}` : '';
       crInfo=`<div class="cr-info">🔄 変更希望：<br>${lines.join('<br>')}${reasonLine}</div>`;
     }
 

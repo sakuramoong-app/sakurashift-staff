@@ -1665,7 +1665,7 @@ const StaffApp = (function(){
     let actions='';
     const hasShift = w && w.shifts && Object.keys(w.shifts).length>0;
     if(hasShift){
-      actions+=`<button class="btn-sm btn-bulk" onclick="StaffApp.fillRemaining('${esc(c.name)}','${wk}')">✅ 残り一括</button>`;
+      // 残り一括ボタンは日付横の一括ボタンに統合したため削除
     }
     if(st==='waiting'||st==='inputting'){
       actions+=`<button class="btn-sm btn-update" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 確定する</button>`;
@@ -1801,11 +1801,23 @@ const StaffApp = (function(){
     const w=Store.getWeek(cast,wk);
     if(!w || !w.shifts[ds]) return;
     const dayStores=STORE_ORDER.filter(m=>Store.getCastStores(cast).includes(m));
-    const allChecked=dayStores.length>0 && dayStores.every(m=>w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
-    const newVal=!allChecked;
-    dayStores.forEach(m=>{
-      Store.dispatch('SET_CHECK',{cast,wk,ds,media:m,checked:newVal,by:staffName,color:staffColor(staffName)});
-    });
+    if(dayStores.length===0) return;
+    // 「残り一括」：未チェックの店舗だけを自分のチェックにする（他人のチェックは触らない）
+    const unchecked=dayStores.filter(m=>{ const ck=w.checks[ds+'_'+m]; return !ck || !ck.checked; });
+    if(unchecked.length>0){
+      // 未チェックがある → 未チェック分を自分のチェックで埋める
+      unchecked.forEach(m=>{
+        Store.dispatch('SET_CHECK',{cast,wk,ds,media:m,checked:true,by:staffName,color:staffColor(staffName)});
+      });
+    } else {
+      // 全部チェック済み → 自分がチェックした分だけ解除（他人の分は残す）
+      dayStores.forEach(m=>{
+        const ck=w.checks[ds+'_'+m];
+        if(ck && ck.checked && ck.by===staffName){
+          Store.dispatch('SET_CHECK',{cast,wk,ds,media:m,checked:false,by:staffName});
+        }
+      });
+    }
     renderCastList();
     autoSave();
   }

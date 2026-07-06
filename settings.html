@@ -162,6 +162,13 @@
       <textarea class="notice-area" id="castNoticeMsg" placeholder="そのキャストへのメッセージ"></textarea>
       <button class="add-btn" style="margin-top:8px" onclick="onSendCastNotice()">💌 通知を送る</button>
     </div>
+    <div style="border-top:1.5px dashed var(--line);padding-top:14px;margin-top:14px">
+      <label class="notice-label">📋 送信済みの個別お知らせ（削除できます）</label>
+      <div id="sentNoticeList" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+        <div style="font-size:12px;color:var(--text2)">読み込み中…</div>
+      </div>
+      <button class="add-btn" style="margin-top:8px;background:#F2FAF6;color:var(--mint-deep);border:2px solid var(--mint)" onclick="SettingsApp.loadSentNotices()">🔄 一覧を更新</button>
+    </div>
     </div>
   </div>
 
@@ -1349,8 +1356,58 @@ const SettingsApp = (function(){
       setState('saved');
       toast(castName+'さんに通知を送りました💌');
       const mi=document.getElementById('castNoticeMsg'); if(mi)mi.value='';
+      loadSentNotices(); // 送信後に一覧を更新
     }catch(e){
       setState('error'); toast('送信に失敗しました');
+    }
+  }
+
+  // 送信済み個別お知らせの一覧を取得して表示
+  async function loadSentNotices(){
+    const box=document.getElementById('sentNoticeList');
+    if(!box) return;
+    box.innerHTML='<div style="font-size:12px;color:var(--text2)">読み込み中…</div>';
+    try{
+      const r=await MasterGas._get({action:'getSentNotices'});
+      const notices=(r&&r.notices)||[];
+      if(notices.length===0){
+        box.innerHTML='<div style="font-size:12px;color:var(--text2)">送信済みの個別お知らせはありません</div>';
+        return;
+      }
+      box.innerHTML='';
+      notices.forEach(n=>{
+        const d=new Date(n.createdAt);
+        const dstr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const item=document.createElement('div');
+        item.style.cssText='background:#F8FBF9;border:2px solid var(--line);border-radius:12px;padding:10px 12px;';
+        item.innerHTML=`
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div style="font-size:12px;font-weight:800;color:var(--pink-deep)">${esc(n.castName)} <span style="color:var(--text2);font-weight:600">${dstr}</span> ${n.read?'<span style="color:var(--mint-deep);font-size:10px">既読</span>':'<span style="color:#E9967A;font-size:10px">未読</span>'}</div>
+            <button style="flex-shrink:0;background:#FFEBEE;color:#C62828;border:1.5px solid #FFCDD2;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer" data-del="${esc(n.id)}">🗑 削除</button>
+          </div>
+          <div style="font-size:13px;color:var(--text);margin-top:5px;white-space:pre-wrap;line-height:1.5">${esc(n.message)}</div>`;
+        item.querySelector('[data-del]').addEventListener('click',()=>deleteNotice(n.id, n.castName));
+        box.appendChild(item);
+      });
+    }catch(e){
+      box.innerHTML='<div style="font-size:12px;color:#C62828">読み込みに失敗しました</div>';
+    }
+  }
+
+  async function deleteNotice(notifId, castName){
+    if(!confirm(`${castName}さんへのお知らせを削除しますか？\nキャストの通知一覧からも消えます。`)) return;
+    setState('saving');
+    try{
+      const r=await MasterGas._post({action:'deleteNotification', notifId});
+      if(r&&r.success){
+        setState('saved');
+        toast('お知らせを削除しました🗑');
+        loadSentNotices();
+      } else {
+        setState('error'); toast('削除に失敗しました');
+      }
+    }catch(e){
+      setState('error'); toast('削除に失敗しました');
     }
   }
   function renderCastNoticeSelect(){
@@ -1368,6 +1425,7 @@ const SettingsApp = (function(){
     renderBizHours();
     renderMinPeople();
     renderEmails();
+    loadSentNotices();
   }
 
   function toast(msg){
@@ -1542,7 +1600,7 @@ const SettingsApp = (function(){
   return { init, addCast, removeCast, updateCastPw, confirmRemoveCast, renderCastList,
            toggleCastExpand, toggleStore, setAlias,
            addStaff, removeStaff, updateStaffColor, confirmRemoveStaff, renderStaffList,
-           saveNotice, sendCastNotice, saveAll,
+           saveNotice, sendCastNotice, loadSentNotices, deleteNotice, saveAll,
            bulkRegenPw,
            setBizWeekly, addClosedDay, removeClosedDay, addSpecialDay, removeSpecialDay,
            setMinPeople, setStaffEmail, setStaffPw,

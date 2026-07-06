@@ -258,6 +258,7 @@
     <select class="staff-select" id="staffSelect" onchange="StaffApp.setStaffName(this.value)"></select>
     <span class="save-state" id="staffSaveState">✅ 保存済み</span>
     <button class="btn btn-soft" onclick="StaffApp.sync()">🔄 同期</button>
+    <button class="btn btn-soft" onclick="StaffApp.openLogs()" title="操作ログ">📋 ログ</button>
     <button class="btn btn-soft" onclick="window.goToSettings()" title="マスタ設定">⚙️ 設定</button>
     <button class="btn btn-soft" id="staffLogoutBtn" style="color:#E05260;border-color:#FFB9B9">ログアウト</button>
   </div>
@@ -1146,6 +1147,20 @@ const Store = (function(){
    ============================================================ */
 
 /* ---------- GASブリッジ（内勤用） ---------- */
+// 監査ログを読みやすい文字列に変換
+function _auditDetail(a){
+  const b=a.before||{}, af=a.after||{};
+  switch(a.action){
+    case 'CONFIRM_WEEK': return 'シフトを確定';
+    case 'ACCEPT_CHANGE': return '変更リクエストを受理';
+    case 'REJECT_CHANGE': return '変更リクエストを却下';
+    case 'DELETE_WEEK': return 'シフトを削除';
+    case 'RESTORE_WEEK': return 'シフトを復元';
+    case 'SUBMIT_WEEK': return 'シフトを提出';
+    default: return a.action;
+  }
+}
+
 const StaffGas = {
   // ★ リトライ付きfetch（GAS応答の一時的な不安定さに対応）
   async _fetchWithRetry(url, options, maxRetries=2){
@@ -1228,6 +1243,17 @@ const StaffGas = {
         else allOk=false;
       }catch(e){ allOk=false; console.warn('保存エラー',key,e); }
     }
+    // 操作ログをGASに送信（確定・変更受理・削除など）
+    try{
+      const audits = Store.getAuditQueue();
+      if(audits.length>0){
+        for(const a of audits){
+          const detail = _auditDetail(a);
+          this._post({action:'addLog', type:a.action, cast:a.castName||'', week:a.weekKey||'', detail, by:a.by||''}).catch(()=>{});
+        }
+        Store.clearAuditQueue();
+      }
+    }catch(e){ /* ログ送信失敗は保存を妨げない */ }
     return allOk;
   },
   // 通知送信（キャストへ）
@@ -1970,6 +1996,50 @@ const StaffApp = (function(){
     el.style.color=s==='error'?'#E05260':'';
   }
 
+  // 操作ログをモーダルで表示
+  async function openLogs(){
+    const existing=document.getElementById('logsModal');
+    if(existing) existing.remove();
+    const modal=document.createElement('div');
+    modal.id='logsModal';
+    modal.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML=`
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.4)" id="logsModalBg"></div>
+      <div style="position:relative;background:#fff;border-radius:18px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+        <div style="padding:16px 20px;border-bottom:2px solid var(--line);display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:16px;font-weight:800;color:var(--text)">📋 操作ログ（新しい順）</div>
+          <button id="logsClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2)">×</button>
+        </div>
+        <div id="logsBody" style="padding:14px 20px;overflow-y:auto;flex:1">
+          <div style="color:var(--text2);font-size:13px">読み込み中…</div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#logsModalBg').addEventListener('click',()=>modal.remove());
+    modal.querySelector('#logsClose').addEventListener('click',()=>modal.remove());
+
+    const body=modal.querySelector('#logsBody');
+    try{
+      const r=await StaffGas._get({action:'getLogs'});
+      const logs=(r&&r.logs)||[];
+      if(logs.length===0){ body.innerHTML='<div style="color:var(--text2);font-size:13px">まだ操作ログはありません</div>'; return; }
+      body.innerHTML='';
+      logs.forEach(l=>{
+        const d=new Date(l.time);
+        const dstr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const row=document.createElement('div');
+        row.style.cssText='padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
+        row.innerHTML=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `
+          +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span> が `
+          +`<span style="font-weight:700">${esc(l.cast||'')}</span> の `
+          +`<span>${esc(l.detail||l.type)}</span>`;
+        body.appendChild(row);
+      });
+    }catch(e){
+      body.innerHTML='<div style="color:#C62828;font-size:13px">ログの読み込みに失敗しました</div>';
+    }
+  }
+
   async function sync(){
     setBusy(true,'最新を読み込み中…');
     await Promise.all([
@@ -2410,7 +2480,7 @@ const StaffApp = (function(){
   }
 
   return {
-    init, setStaffName, jumpToCast, toggleCast,
+    init, setStaffName, jumpToCast, toggleCast, openLogs,
     toggleCheck, toggleDayAll, fillRemaining,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks,
     acceptVacation, rejectVacation, cancelVacationDay,

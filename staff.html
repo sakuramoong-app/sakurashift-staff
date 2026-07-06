@@ -1025,16 +1025,20 @@ const Store = (function(){
       case 'ACCEPT_CHANGE': {
         const w = _ensureWeek(p.cast, p.wk);
         if(!canTransition(w.status,'change_inputting')) return {error:'BAD_TRANSITION'};
+        const before = _statusSnapshot(w);
         w.status = 'change_inputting';
         _touch(p.cast, p.wk, state.currentStaffName);
+        _audit('ACCEPT_CHANGE', p.cast, p.wk, before, _statusSnapshot(w), p.by || state.currentStaffName, 'staff');
         break;
       }
 
       case 'REJECT_CHANGE': {
         const w = _ensureWeek(p.cast, p.wk);
+        const before = _statusSnapshot(w);
         w.changeRequest = null;
         w.status = 'confirmed';
         _touch(p.cast, p.wk, state.currentStaffName);
+        _audit('REJECT_CHANGE', p.cast, p.wk, before, _statusSnapshot(w), p.by || state.currentStaffName, 'staff');
         break;
       }
 
@@ -1157,6 +1161,7 @@ function _auditDetail(a){
     case 'DELETE_WEEK': return 'シフトを削除';
     case 'RESTORE_WEEK': return 'シフトを復元';
     case 'SUBMIT_WEEK': return 'シフトを提出';
+    case 'CAST_SUBMIT': return 'シフトを提出';
     default: return a.action;
   }
 }
@@ -1630,9 +1635,54 @@ const StaffApp = (function(){
     expandedCast = (expandedCast===name)?null:name;
     renderCastList();
     if(expandedCast===name){
-      // 最短入力可能日が別月なら先に月切り替え
-      _jumpToFirstEditableWithMonthSwitch(name);
+      // 変更申請中フィルターなら、変更申請のある日にジャンプ
+      if(filter==='change'){
+        _jumpToChangeRequest(name);
+      } else {
+        // 最短入力可能日が別月なら先に月切り替え
+        _jumpToFirstEditableWithMonthSwitch(name);
+      }
     }
+  }
+
+  // 変更申請のある最初の日にジャンプ（必要なら月切り替え）
+  async function _jumpToChangeRequest(name){
+    // 全月から change_requested の週を探す
+    const allWeeks=[];
+    for(let i=-1;i<3;i++){
+      let [y,m]=viewYM.split('-').map(Number);
+      m+=i; if(m<1){m+=12;y--;} if(m>12){m-=12;y++;}
+      weeksInMonth(`${y}-${String(m).padStart(2,'0')}`).forEach(wk=>{ if(!allWeeks.includes(wk)) allWeeks.push(wk); });
+    }
+    allWeeks.sort();
+    let targetDs=null;
+    for(const wk of allWeeks){
+      const w=Store.getWeek(name,wk);
+      if(!w || w.status!=='change_requested' || !w.changeRequest) continue;
+      // 変更申請のある最初の日付
+      const days=Object.keys(w.changeRequest).sort();
+      if(days.length>0){ targetDs=days[0]; break; }
+    }
+    if(!targetDs){ _jumpToFirstEditableWithMonthSwitch(name); return; }
+    // 別月なら切り替え
+    const targetYM=targetDs.slice(0,7);
+    if(targetYM!==viewYM){
+      viewYM=targetYM;
+      const lbl=document.getElementById('staffMonthLabel');
+      if(lbl){const[y,m]=viewYM.split('-').map(Number);lbl.textContent=`${y}年 ${m}月`;}
+      setBusy(true,'読み込み中…');
+      await StaffGas.loadMonthAll(viewYM);
+      setBusy(false);
+      expandedCast=name;
+      renderCastList();
+    }
+    setTimeout(()=>{
+      const castEl=document.getElementById('cast-'+cssEscape(name));
+      if(!castEl) return;
+      const row=castEl.querySelector(`.check-row[data-ds="${targetDs}"]`);
+      if(row){ row.scrollIntoView({behavior:'smooth',block:'center'}); row.classList.add('row-spin'); setTimeout(()=>row.classList.remove('row-spin'),2000); }
+      else castEl.scrollIntoView({behavior:'smooth',block:'center'});
+    },140);
   }
 
   async function _jumpToFirstEditableWithMonthSwitch(name){
@@ -2005,10 +2055,20 @@ const StaffApp = (function(){
     modal.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
     modal.innerHTML=`
       <div style="position:absolute;inset:0;background:rgba(0,0,0,.4)" id="logsModalBg"></div>
-      <div style="position:relative;background:#fff;border-radius:18px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
+      <div style="position:relative;background:#fff;border-radius:18px;max-width:600px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
         <div style="padding:16px 20px;border-bottom:2px solid var(--line);display:flex;justify-content:space-between;align-items:center">
           <div style="font-size:16px;font-weight:800;color:var(--text)">📋 操作ログ（新しい順）</div>
           <button id="logsClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2)">×</button>
+        </div>
+        <div style="padding:12px 20px 8px;border-bottom:1px solid var(--line)">
+          <input type="text" id="logsSearch" placeholder="🔍 キャスト名・内勤名で検索" style="width:100%;padding:9px 12px;border-radius:10px;border:2px solid var(--line);font-family:inherit;font-size:13px;margin-bottom:8px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="log-filter-chip active" data-lf="all" style="padding:5px 11px;border-radius:99px;border:2px solid var(--mint);background:var(--mint-deep);color:#fff;font-size:11px;font-weight:800;cursor:pointer">すべて</button>
+            <button class="log-filter-chip" data-lf="CAST_SUBMIT" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">シフト提出</button>
+            <button class="log-filter-chip" data-lf="CONFIRM_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">確定</button>
+            <button class="log-filter-chip" data-lf="ACCEPT_CHANGE" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">変更受理</button>
+            <button class="log-filter-chip" data-lf="DELETE_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">削除</button>
+          </div>
         </div>
         <div id="logsBody" style="padding:14px 20px;overflow-y:auto;flex:1">
           <div style="color:var(--text2);font-size:13px">読み込み中…</div>
@@ -2018,25 +2078,54 @@ const StaffApp = (function(){
     modal.querySelector('#logsModalBg').addEventListener('click',()=>modal.remove());
     modal.querySelector('#logsClose').addEventListener('click',()=>modal.remove());
 
-    const body=modal.querySelector('#logsBody');
-    try{
-      const r=await StaffGas._get({action:'getLogs'});
-      const logs=(r&&r.logs)||[];
-      if(logs.length===0){ body.innerHTML='<div style="color:var(--text2);font-size:13px">まだ操作ログはありません</div>'; return; }
+    let _allLogs=[];
+    let _logFilter='all';
+    let _logSearch='';
+
+    function renderLogs(){
+      const body=modal.querySelector('#logsBody');
+      let logs=_allLogs;
+      if(_logFilter!=='all') logs=logs.filter(l=>l.type===_logFilter);
+      if(_logSearch) logs=logs.filter(l=>(l.cast||'').includes(_logSearch)||(l.by||'').includes(_logSearch));
+      if(logs.length===0){ body.innerHTML='<div style="color:var(--text2);font-size:13px">該当するログはありません</div>'; return; }
       body.innerHTML='';
       logs.forEach(l=>{
         const d=new Date(l.time);
         const dstr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        // タイプ別の色タグ
+        const tagColor = l.type==='CAST_SUBMIT'?'#5FD0A0':l.type==='CONFIRM_WEEK'?'#4A9EE0':l.type==='ACCEPT_CHANGE'?'#E9A23B':l.type==='DELETE_WEEK'?'#E05260':'#999';
         const row=document.createElement('div');
         row.style.cssText='padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
         row.innerHTML=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `
-          +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span> が `
-          +`<span style="font-weight:700">${esc(l.cast||'')}</span> の `
-          +`<span>${esc(l.detail||l.type)}</span>`;
+          +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(_auditDetail({action:l.type}))}</span> `
+          +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span>`
+          +(l.cast?` → <span style="font-weight:700">${esc(l.cast)}</span>`:'')
+          +(l.detail&&l.detail!==_auditDetail({action:l.type})?` <span style="color:var(--text2);font-size:12px">${esc(l.detail)}</span>`:'');
         body.appendChild(row);
       });
+    }
+
+    // 検索・フィルターのイベント
+    modal.querySelector('#logsSearch').addEventListener('input',(e)=>{ _logSearch=e.target.value.trim(); renderLogs(); });
+    modal.querySelectorAll('.log-filter-chip').forEach(chip=>{
+      chip.addEventListener('click',()=>{
+        _logFilter=chip.dataset.lf;
+        modal.querySelectorAll('.log-filter-chip').forEach(c=>{
+          const active=c.dataset.lf===_logFilter;
+          c.style.background=active?'var(--mint-deep)':'#fff';
+          c.style.color=active?'#fff':'var(--text2)';
+          c.style.borderColor=active?'var(--mint)':'var(--line)';
+        });
+        renderLogs();
+      });
+    });
+
+    try{
+      const r=await StaffGas._get({action:'getLogs'});
+      _allLogs=(r&&r.logs)||[];
+      renderLogs();
     }catch(e){
-      body.innerHTML='<div style="color:#C62828;font-size:13px">ログの読み込みに失敗しました</div>';
+      modal.querySelector('#logsBody').innerHTML='<div style="color:#C62828;font-size:13px">ログの読み込みに失敗しました</div>';
     }
   }
 

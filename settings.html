@@ -1216,6 +1216,9 @@ const SettingsApp = (function(){
     }catch(e){ setState('error'); toast('通信エラー'); return; }
     const r = Store.dispatch('REMOVE_CAST',{name, role});
     if(r.error){ toast(errorMessage(r.error)); setState('saved'); return; }
+    // 操作ログに記録（退店・キャスト削除）
+    const staffName = sessionStorage.getItem('staffName') || '';
+    MasterGas._post({action:'addLog', type:'DELETE_CAST', cast:name, week:'', detail:'キャストを削除（退店）', by:staffName}).catch(()=>{});
     setState('saved');
     renderCastList();
     markUnsaved();

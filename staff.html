@@ -1159,6 +1159,7 @@ function _auditDetail(a){
     case 'ACCEPT_CHANGE': return '変更リクエストを受理';
     case 'REJECT_CHANGE': return '変更リクエストを却下';
     case 'DELETE_WEEK': return 'シフトを削除';
+    case 'DELETE_CAST': return 'キャストを削除（退店）';
     case 'RESTORE_WEEK': return 'シフトを復元';
     case 'SUBMIT_WEEK': return 'シフトを提出';
     case 'CAST_SUBMIT': return 'シフトを提出';
@@ -1469,6 +1470,17 @@ const StaffApp = (function(){
       if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
       if(targetDs){
         _spinRow(name, targetDs);
+      } else if(wk){
+        // 提出など：その週の最初のシフトがある日にジャンプ
+        const w=Store.getWeek(name,wk);
+        let firstDs=null;
+        if(w&&w.shifts){
+          for(const ds of weekDates(wk)){
+            if(w.shifts[ds]&&w.shifts[ds].start!=null){ firstDs=ds; break; }
+          }
+        }
+        if(firstDs) _spinRow(name, firstDs);
+        else _jumpToFirstEditable(name);
       } else {
         _jumpToFirstEditable(name);
       }
@@ -2067,7 +2079,7 @@ const StaffApp = (function(){
             <button class="log-filter-chip" data-lf="CAST_SUBMIT" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">シフト提出</button>
             <button class="log-filter-chip" data-lf="CONFIRM_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">確定</button>
             <button class="log-filter-chip" data-lf="ACCEPT_CHANGE" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">変更受理</button>
-            <button class="log-filter-chip" data-lf="DELETE_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">削除</button>
+            <button class="log-filter-chip" data-lf="DELETE_CAST" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">キャスト削除</button>
           </div>
         </div>
         <div id="logsBody" style="padding:14px 20px;overflow-y:auto;flex:1">
@@ -2093,7 +2105,7 @@ const StaffApp = (function(){
         const d=new Date(l.time);
         const dstr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         // タイプ別の色タグ
-        const tagColor = l.type==='CAST_SUBMIT'?'#5FD0A0':l.type==='CONFIRM_WEEK'?'#4A9EE0':l.type==='ACCEPT_CHANGE'?'#E9A23B':l.type==='DELETE_WEEK'?'#E05260':'#999';
+        const tagColor = l.type==='CAST_SUBMIT'?'#5FD0A0':l.type==='CONFIRM_WEEK'?'#4A9EE0':l.type==='ACCEPT_CHANGE'?'#E9A23B':(l.type==='DELETE_WEEK'||l.type==='DELETE_CAST')?'#E05260':'#999';
         const row=document.createElement('div');
         row.style.cssText='padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
         row.innerHTML=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `

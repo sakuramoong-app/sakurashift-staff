@@ -1169,18 +1169,30 @@ function _auditDetail(a){
 
 const StaffGas = {
   // ★ リトライ付きfetch（GAS応答の一時的な不安定さに対応）
+  _showBusyMsg(){
+    try{
+      const lt=document.getElementById('loadingText');
+      if(lt) lt.textContent='🌸 サーバーが混雑しています。少々お待ちください…';
+      const cl=document.querySelector('.cal-loading');
+      if(cl) cl.innerHTML='<span class="spinner"></span>🌸 混雑しています。少々お待ちください…';
+    }catch(_){}
+  },
   async _fetchWithRetry(url, options, maxRetries=2){
     let lastErr;
     for(let attempt=0; attempt<=maxRetries; attempt++){
+      // 3秒返らなければ「混雑中」案内を出す（リクエストは切らずに待つ）
+      const busyTimer = setTimeout(()=>this._showBusyMsg(), 3000);
       try{
         const ctrl = new AbortController();
         const timer = setTimeout(()=>ctrl.abort(), 40000);
         const res = await fetch(url, Object.assign({}, options, {signal:ctrl.signal}));
         clearTimeout(timer);
+        clearTimeout(busyTimer);
         const text = await res.text();
         if(text.trim().startsWith('<')){ throw new Error('GAS_HTML_ERROR'); }
         return JSON.parse(text);
       }catch(e){
+        clearTimeout(busyTimer);
         lastErr = e;
         if(attempt < maxRetries){
           // リトライ中は「混雑中」メッセージに切り替え
@@ -1315,16 +1327,44 @@ const StaffApp = (function(){
   async function init(opts){
     role = (opts && opts.role) || 'staff';
     setBusy(true,'読み込み中…');
-    await Promise.all([
-      StaffGas.loadMaster(),
-      StaffGas.loadMonthAll(viewYM),       // チェック画面用（表示中の月）
-      StaffGas.loadAllWeeks(),              // 受信ボックス用（全期間）
-    ]);
+    try{
+      await Promise.all([
+        StaffGas.loadMaster(),
+        StaffGas.loadMonthAll(viewYM),       // チェック画面用（表示中の月）
+        StaffGas.loadAllWeeks(),              // 受信ボックス用（全期間）
+      ]);
+    }catch(e){ /* 個別のcatchで握るが念のため */ }
+    // マスタが読めなかった場合は再試行案内を表示
+    const castList = Store.getCastList();
+    if(!castList || castList.length===0){
+      _showRetryScreen(opts);
+      return;
+    }
     staffName = (opts && opts.staffName) || (Store.getStaffList()[0] && Store.getStaffList()[0].name) || '';
     Store.dispatch('SET_USER',{user:{type:role,name:staffName}});
     Store.dispatch('SET_STAFF_NAME',{name:staffName});
     setBusy(false);
     renderAll();
+  }
+
+  // 読み込み失敗時：再試行画面
+  function _showRetryScreen(opts){
+    const ov=document.getElementById('loadingOverlay');
+    const txt=document.getElementById('loadingText');
+    if(txt){
+      txt.innerHTML='😥 サーバーが混雑していて読み込めませんでした。<br><span style="font-size:12px;color:#9AA5B0">時間をおくと改善することがあります</span>';
+    }
+    // 再試行ボタンを差し込む
+    let btn=document.getElementById('retryLoadBtn');
+    if(!btn && ov){
+      btn=document.createElement('button');
+      btn.id='retryLoadBtn';
+      btn.textContent='🔄 もう一度読み込む';
+      btn.style.cssText='margin-top:16px;padding:12px 28px;border:none;border-radius:12px;background:linear-gradient(135deg,#7EC8E3,#5FB0D0);color:#fff;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(95,176,208,.4)';
+      btn.addEventListener('click',()=>{ btn.remove(); init(opts); });
+      const box=ov.querySelector('.loading-box')||ov;
+      box.appendChild(btn);
+    }
   }
 
   function nextMonthYM(n){

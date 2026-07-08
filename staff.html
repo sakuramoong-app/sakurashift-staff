@@ -1262,7 +1262,13 @@ const StaffGas = {
   },
   async loadAllWeeks(){
     try{
-      const r = await this._get({action:'loadAllWeeks'});
+      // ★ 軽量化：直近3ヶ月分の週だけ読む（データ増加に強い）
+      const d=new Date(); d.setMonth(d.getMonth()-3);
+      // 3ヶ月前が属する週の月曜を求める
+      const dow=d.getDay(); const diff=dow===0?-6:1-dow;
+      d.setDate(d.getDate()+diff);
+      const sinceWk=ymd(d);
+      const r = await this._get({action:'loadAllWeeks', sinceWk});
       if(r && r.weeks){ Store.dispatch('LOAD_WEEKS', {weeks:r.weeks}); }
       return true;
     }catch(e){ console.warn('全週読込エラー',e); return false; }
@@ -1500,26 +1506,17 @@ const StaffApp = (function(){
     expandedCast=name;
     // wkが表示中の月と異なる場合は自動で月を切り替え
     if(wk){
-      const wkYM = wk.slice(0,7);
-      // wkを含む月を特定（weekTouchesMonthで判定）
-      let targetYM = null;
-      // その週が属する月を探す（最初に一致する月）
-      if(wkYM !== viewYM){
-        // wkの月曜日が含まれる月
-        const wkDates = weekDates(wk);
-        // 週の中で最も多い月を選ぶ
-        const ymCount = {};
-        wkDates.forEach(ds=>{ const ym=ds.slice(0,7); ymCount[ym]=(ymCount[ym]||0)+1; });
-        targetYM = Object.entries(ymCount).sort((a,b)=>b[1]-a[1])[0][0];
-        if(targetYM !== viewYM){
-          // 月を切り替えてから再ロード
-          viewYM = targetYM;
-          const lbl=document.getElementById('staffMonthLabel');
-          if(lbl){ const[y,m]=viewYM.split('-').map(Number); lbl.textContent=`${y}年 ${m}月`; }
-          setBusy(true,'読み込み中…');
-          await StaffGas.loadMonthAll(viewYM);
-          setBusy(false);
-        }
+      // ★ A方式：週の所属月＝月曜が属する月（週キーの月）で統一
+      // 「最も多い月」で判定すると月マタギ週でズレるため、週キーの月を使う
+      const targetYM = wk.slice(0,7);
+      if(targetYM !== viewYM){
+        // 月を切り替えてから再ロード
+        viewYM = targetYM;
+        const lbl=document.getElementById('staffMonthLabel');
+        if(lbl){ const[y,m]=viewYM.split('-').map(Number); lbl.textContent=`${y}年 ${m}月`; }
+        setBusy(true,'読み込み中…');
+        await StaffGas.loadMonthAll(viewYM);
+        setBusy(false);
       }
     }
     renderCastList();
@@ -1545,8 +1542,7 @@ const StaffApp = (function(){
     if(btn){
       btn.scrollIntoView({behavior:'smooth', block:'center'});
       btn.classList.add('metal-glow');
-      // 8秒キラキラ（確定するまで目立たせる。押したら消える）
-      setTimeout(()=>btn.classList.remove('metal-glow'), 8000);
+      // 確定するまで光り続ける（押すとrenderで再描画され自然に消える）
     } else {
       // 確定ボタンが無ければ（既に確定済み等）その週の日にジャンプ
       const w=Store.getWeek(name,wk);

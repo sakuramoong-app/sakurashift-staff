@@ -145,6 +145,24 @@
     100%{box-shadow: 3px 0   0 2px #FF1493, 0  -3px 0 2px #C71585;}
   }
   .row-spin{animation:rowSpin .8s linear 3;position:relative;z-index:1;}
+  /* 確定ボタンのメタリックキラキラ */
+  @keyframes metalShine{
+    0%{background-position:-200% center;}
+    100%{background-position:200% center;}
+  }
+  @keyframes metalPulse{
+    0%,100%{box-shadow:0 0 8px rgba(255,215,0,.5),0 3px 10px rgba(0,0,0,.2);transform:scale(1);}
+    50%{box-shadow:0 0 20px rgba(255,215,0,.9),0 3px 14px rgba(0,0,0,.3);transform:scale(1.06);}
+  }
+  .confirm-btn.metal-glow{
+    background:linear-gradient(110deg,#FFD700 0%,#FFF6C0 20%,#FFB800 40%,#FFF6C0 60%,#FFD700 80%,#FFB800 100%)!important;
+    background-size:200% auto!important;
+    color:#7A5C00!important;
+    font-weight:900!important;
+    border:2px solid #FFD700!important;
+    animation:metalShine 2s linear infinite,metalPulse 1.2s ease-in-out infinite!important;
+    text-shadow:0 1px 1px rgba(255,255,255,.6);
+  }
   .week-block.row-spin{animation:rowSpin .8s linear 3;border-radius:12px;}
   /* フィルターボタンくるくる演出 */
   @keyframes borderSpin{
@@ -1511,20 +1529,36 @@ const StaffApp = (function(){
       if(targetDs){
         _spinRow(name, targetDs);
       } else if(wk){
-        // 提出など：その週の最初のシフトがある日にジャンプ
-        const w=Store.getWeek(name,wk);
-        let firstDs=null;
-        if(w&&w.shifts){
-          for(const ds of weekDates(wk)){
-            if(w.shifts[ds]&&w.shifts[ds].start!=null){ firstDs=ds; break; }
-          }
-        }
-        if(firstDs) _spinRow(name, firstDs);
-        else _jumpToFirstEditable(name);
+        // 提出など：確定ボタンにジャンプ＆メタリックキラキラ
+        _spinConfirmBtn(name, wk);
       } else {
         _jumpToFirstEditable(name);
       }
     },120);
+  }
+
+  // 確定ボタンにジャンプ＆メタリックキラキラ
+  function _spinConfirmBtn(name, wk){
+    const castEl = document.getElementById('cast-'+cssEscape(name));
+    if(!castEl) return;
+    const btn = castEl.querySelector(`.confirm-btn[data-confirm-wk="${wk}"]`);
+    if(btn){
+      btn.scrollIntoView({behavior:'smooth', block:'center'});
+      btn.classList.add('metal-glow');
+      // 8秒キラキラ（確定するまで目立たせる。押したら消える）
+      setTimeout(()=>btn.classList.remove('metal-glow'), 8000);
+    } else {
+      // 確定ボタンが無ければ（既に確定済み等）その週の日にジャンプ
+      const w=Store.getWeek(name,wk);
+      let firstDs=null;
+      if(w&&w.shifts){
+        for(const ds of weekDates(wk)){
+          if(w.shifts[ds]&&w.shifts[ds].start!=null){ firstDs=ds; break; }
+        }
+      }
+      if(firstDs) _spinRow(name, firstDs);
+      else _jumpToFirstEditable(name);
+    }
   }
 
   // 指定日付の行をメタリックくるくる
@@ -1796,12 +1830,12 @@ const StaffApp = (function(){
       // 残り一括ボタンは日付横の一括ボタンに統合したため削除
     }
     if(st==='waiting'||st==='inputting'){
-      actions+=`<button class="btn-sm btn-update" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 確定する</button>`;
+      actions+=`<button class="btn-sm btn-update confirm-btn" data-confirm-wk="${wk}" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 確定する</button>`;
     } else if(st==='change_requested'){
       actions+=`<button class="btn-sm btn-accept" onclick="StaffApp.acceptChange('${esc(c.name)}','${wk}')">✅ 受理</button>
                <button class="btn-sm btn-reject" onclick="StaffApp.rejectChange('${esc(c.name)}','${wk}')">🙅 却下</button>`;
     } else if(st==='change_inputting'){
-      actions+=`<button class="btn-sm btn-update" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 変更を反映して確定</button>`;
+      actions+=`<button class="btn-sm btn-update confirm-btn" data-confirm-wk="${wk}" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 変更を反映して確定</button>`;
     }
 
     let crInfo='';

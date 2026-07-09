@@ -209,15 +209,22 @@
   .hc-table thead th{
     background:linear-gradient(135deg,#5A6270,#3D4450);color:#fff;font-weight:800;font-size:12px;
     padding:11px 8px;text-align:center;white-space:nowrap;line-height:1.3;
-    position:sticky;top:0;z-index:5;
+    position:sticky;top:0;z-index:5;border-right:1px solid rgba(255,255,255,.18);
   }
-  .hc-table thead th:first-child{border-top-left-radius:0;text-align:left;padding-left:14px;}
+  .hc-table thead th:first-child{border-top-left-radius:0;text-align:left;padding-left:14px;border-right:2px solid rgba(255,255,255,.35);}
+  .hc-table thead th:last-child{border-right:none;}
+  .hc-table thead th.hc-th-plan{border-left:2px solid rgba(255,255,255,.35);}
   .hc-th-date{min-width:96px;}
   .hc-th-plan{text-align:left!important;padding-left:14px!important;min-width:200px;}
-  .hc-trow td{padding:9px 8px;text-align:center;border-bottom:1px solid #F0F0F0;vertical-align:middle;}
+  .hc-trow td{padding:10px 8px;text-align:center;border-bottom:1px solid #E6E6E6;border-right:1px solid #ECECEC;vertical-align:middle;}
+  .hc-trow td:last-child{border-right:none;}
+  /* 時間帯ブロック列に薄い交互の色 → 区切りを明確に */
+  .hc-trow td:nth-child(2){background-color:rgba(143,217,192,.07);}
+  .hc-trow td:nth-child(4){background-color:rgba(143,217,192,.07);}
+  .hc-trow td:nth-child(6){background-color:rgba(255,143,184,.06);}
   .hc-trow{background:#fff;}
   .hc-trow:hover{background:#FFFAFC;}
-  .hc-date-cell{text-align:left!important;padding-left:14px!important;font-weight:800;color:var(--text);white-space:nowrap;}
+  .hc-date-cell{text-align:left!important;padding-left:14px!important;font-weight:800;color:var(--text);white-space:nowrap;border-right:2px solid #D8D8D8!important;}
   .hc-zoom{cursor:pointer;font-size:13px;margin-left:3px;opacity:.7;}
   .hc-zoom:hover{opacity:1;}
   .hc-cell{font-weight:800;color:var(--mint-deep);white-space:nowrap;}
@@ -226,7 +233,7 @@
   .hc-cell-none{color:#CCC;}
   .hc-cell-short{background:#FFEEF0;border-radius:8px;}
   .hc-cell-short .hc-cell-num{color:#E0405A;}
-  .hc-plan-cell{text-align:left!important;padding-left:14px!important;max-width:280px;line-height:1.9;}
+  .hc-plan-cell{text-align:left!important;padding-left:14px!important;max-width:280px;line-height:1.9;border-left:2px solid #D8D8D8!important;}
   .hc-plan-chip{display:inline-block;background:var(--mint-soft);color:var(--mint-deep);border:1px solid var(--mint-line);border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700;margin:1px 3px 1px 0;white-space:nowrap;}
   .hc-plan-none{color:#CCC;}
   .hc-closed-cell{color:var(--text2);font-weight:700;background:#F8F8F8;}

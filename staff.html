@@ -255,6 +255,8 @@
   .hvc-sat{color:#5B9BD5;}
   .hvc-casts{display:flex;flex-wrap:wrap;gap:6px;flex:1;}
   .hvc-cast-chip{background:#fff;border:1.5px solid #81D4FA;border-radius:99px;padding:3px 12px;font-size:12px;font-weight:700;color:#0277BD;}
+  .hvc-add-btn{background:#F0FAF6;border:1.5px dashed var(--mint);border-radius:99px;padding:3px 12px;font-size:13px;font-weight:900;color:var(--mint-deep);cursor:pointer;font-family:inherit;}
+  .hvc-add-btn:active{transform:scale(.95);}
   .hvc-none-day{font-size:12px;color:#C8CDD2;}
 </style>
 </head>
@@ -2606,9 +2608,10 @@ const StaffApp = (function(){
         <div class="hvc-date ${dowCls}">${m}/${d}(${dows[dow]})</div>
         <div class="hvc-casts">
           ${vacCasts.length
-            ? vacCasts.map(v=>`<span class="hvc-cast-chip">${esc(v.name)}${v.memo?'：'+esc(v.memo):''}</span>`).join('')
+            ? vacCasts.map(v=>`<span class="hvc-cast-chip">${esc(v.name)}${v.memo?'：'+esc(v.memo):''}<span onclick="StaffApp.removeVacation('${esc(v.name)}','${ds}')" style="cursor:pointer;color:#E05260;font-weight:900;margin-left:5px" title="削除">✕</span></span>`).join('')
             : '<span class="hvc-none-day">—</span>'
           }
+          <button class="hvc-add-btn" onclick="StaffApp.openVacAdd('${ds}')" title="この日に長期休暇を追加">＋</button>
         </div>
       </div>`);
     }
@@ -2622,6 +2625,75 @@ const StaffApp = (function(){
   }
 
   function setVacCalYM(ym){ _vacCalYM=ym; renderHeadcount(); }
+
+  // 内勤が長期休暇を直接追加（日付指定→キャスト選択→理由）
+  function openVacAdd(ds){
+    const existing=document.getElementById('vacAddModal');
+    if(existing) existing.remove();
+    const castList=Store.getCastList();
+    const d=new Date(ds+'T12:00:00');
+    const dows=['日','月','火','水','木','金','土'];
+    const dateLabel=`${d.getMonth()+1}/${d.getDate()}(${dows[d.getDay()]})`;
+    const modal=document.createElement('div');
+    modal.id='vacAddModal';
+    modal.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML=`
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.4)" id="vacAddBg"></div>
+      <div style="position:relative;background:#fff;border-radius:18px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.25);padding:22px">
+        <div style="font-size:17px;font-weight:900;color:var(--text);margin-bottom:4px">🏖 長期休暇を追加</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">${dateLabel} に長期休暇を登録します</div>
+        <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px">キャストを選択</div>
+        <select id="vacAddCast" style="width:100%;padding:11px;border:2px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;margin-bottom:14px">
+          ${castList.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+        </select>
+        <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px">理由（任意）</div>
+        <input type="text" id="vacAddMemo" placeholder="例：里帰り、療養 など" style="width:100%;padding:11px;border:2px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;margin-bottom:8px;box-sizing:border-box">
+        <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px">終了日（任意・連続した休暇の場合）</div>
+        <input type="date" id="vacAddEnd" value="${ds}" min="${ds}" style="width:100%;padding:11px;border:2px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;margin-bottom:18px;box-sizing:border-box">
+        <div style="display:flex;gap:10px">
+          <button id="vacAddCancel" style="flex:1;padding:12px;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--text2);font-weight:800;cursor:pointer">キャンセル</button>
+          <button id="vacAddSave" style="flex:1;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;cursor:pointer">追加する</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#vacAddBg').addEventListener('click',()=>modal.remove());
+    modal.querySelector('#vacAddCancel').addEventListener('click',()=>modal.remove());
+    modal.querySelector('#vacAddSave').addEventListener('click',async ()=>{
+      const cast=modal.querySelector('#vacAddCast').value;
+      const memo=modal.querySelector('#vacAddMemo').value.trim();
+      const endDs=modal.querySelector('#vacAddEnd').value||ds;
+      // ds〜endDsの全日付を作る
+      const dates=[];
+      let cur=new Date(ds+'T12:00:00'); const end=new Date(endDs+'T12:00:00');
+      while(cur<=end){ dates.push(ymd(cur)); cur.setDate(cur.getDate()+1); }
+      modal.remove();
+      // 週ごとにACCEPT_VACATIONを発火
+      const byWk={};
+      dates.forEach(d2=>{ const wk=weekKeyOf(d2); if(!byWk[wk])byWk[wk]=[]; byWk[wk].push(d2); });
+      let ok=true;
+      for(const wk in byWk){
+        const r=Store.dispatch('ACCEPT_VACATION',{cast, dates:byWk[wk], memo, by:staffName});
+        if(r&&r.error){ toast(errorMessage(r.error)); ok=false; }
+      }
+      if(ok){
+        renderHeadcount();
+        await saveNow();
+        toast(`${cast}さんの長期休暇を追加しました🏖`);
+      }
+    });
+  }
+
+  // 内勤が長期休暇を削除
+  async function removeVacation(cast, ds){
+    if(!confirm(`${cast}さんの${ds}の長期休暇を削除しますか？`)) return;
+    const wk=weekKeyOf(ds);
+    const r=Store.dispatch('CANCEL_VACATION',{cast, wk, dates:[ds]});
+    if(r&&r.error){ toast(errorMessage(r.error)); return; }
+    renderHeadcount();
+    await saveNow();
+    toast(`${cast}さんの長期休暇を削除しました`);
+  }
+
   function setVacCalY(y){
     const m=_vacCalYM.split('-')[1];
     _vacCalYM=`${y}-${m}`;
@@ -2654,7 +2726,7 @@ const StaffApp = (function(){
     init, setStaffName, jumpToCast, toggleCast, openLogs,
     toggleCheck, toggleDayAll, fillRemaining,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks,
-    acceptVacation, rejectVacation, cancelVacationDay,
+    acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,
     initHeadcount, renderHeadcount, switchHcTab, toggleHcDetail,

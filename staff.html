@@ -201,6 +201,59 @@
   .page-tab.active{background:#fff;color:var(--mint-deep);box-shadow:0 2px 8px var(--shadow);}
   /* 人数確認 */
   .hc-tabs{display:flex;gap:6px;margin-bottom:14px;}
+  /* ===== 人数確認 週テーブル ===== */
+  .hc-table-title{font-size:16px;font-weight:900;color:var(--text);margin:18px 0 10px;display:flex;align-items:center;gap:8px;}
+  .hc-table-sub{font-size:12px;color:var(--text2);font-weight:700;}
+  .hc-table-wrap{overflow-x:auto;border-radius:16px;border:2px solid var(--pink-line);box-shadow:0 2px 12px rgba(232,106,155,.08);}
+  .hc-table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px;background:#fff;}
+  .hc-table thead th{
+    background:linear-gradient(135deg,#5A6270,#3D4450);color:#fff;font-weight:800;font-size:12px;
+    padding:11px 8px;text-align:center;white-space:nowrap;line-height:1.3;
+  }
+  .hc-table thead th:first-child{border-top-left-radius:0;text-align:left;padding-left:14px;}
+  .hc-th-date{min-width:96px;}
+  .hc-th-plan{text-align:left!important;padding-left:14px!important;min-width:200px;}
+  .hc-trow td{padding:9px 8px;text-align:center;border-bottom:1px solid #F0F0F0;vertical-align:middle;}
+  .hc-trow{background:#fff;}
+  .hc-trow:hover{background:#FFFAFC;}
+  .hc-date-cell{text-align:left!important;padding-left:14px!important;font-weight:800;color:var(--text);white-space:nowrap;}
+  .hc-zoom{cursor:pointer;font-size:13px;margin-left:3px;opacity:.7;}
+  .hc-zoom:hover{opacity:1;}
+  .hc-cell{font-weight:800;color:var(--mint-deep);white-space:nowrap;}
+  .hc-cell-num{font-size:15px;color:var(--text);}
+  .hc-cell-min{font-size:11px;color:var(--text2);font-weight:700;}
+  .hc-cell-none{color:#CCC;}
+  .hc-cell-short{background:#FFEEF0;border-radius:8px;}
+  .hc-cell-short .hc-cell-num{color:#E0405A;}
+  .hc-plan-cell{text-align:left!important;padding-left:14px!important;max-width:280px;line-height:1.9;}
+  .hc-plan-chip{display:inline-block;background:var(--mint-soft);color:var(--mint-deep);border:1px solid var(--mint-line);border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700;margin:1px 3px 1px 0;white-space:nowrap;}
+  .hc-plan-none{color:#CCC;}
+  .hc-closed-cell{color:var(--text2);font-weight:700;background:#F8F8F8;}
+  .hc-memo-trow td{padding:0 14px 8px;border-bottom:2px solid #F5F5F5;background:#FAFAFA;}
+  .hc-memo-trow .hc-date-memo{width:100%;padding:7px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:12px;font-family:inherit;color:var(--text);background:#fff;box-sizing:border-box;}
+  .hc-detail-trow td{padding:0;background:#FBFDFF;border-bottom:2px solid #F5F5F5;}
+  .hc-detail-inner{padding:14px 16px;}
+
+  /* 縦棒グラフ */
+  .vbar-chart{display:flex;align-items:flex-end;gap:3px;height:150px;overflow-x:auto;padding:6px 2px 0;}
+  .vbar-col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:30px;flex:1;height:100%;}
+  .vbar-val{font-size:11px;font-weight:800;color:var(--text);margin-bottom:3px;white-space:nowrap;line-height:1;}
+  .vbar-val-short{color:#E0405A;}
+  .vbar-min{font-size:9px;color:var(--text2);font-weight:600;}
+  .vbar-track{width:22px;height:100%;display:flex;align-items:flex-end;background:#F4F4F6;border-radius:6px 6px 0 0;overflow:hidden;}
+  .vbar-fill{width:100%;border-radius:6px 6px 0 0;transition:height .3s;}
+  .vbar-full{background:linear-gradient(180deg,var(--mint),var(--mint-deep));}
+  .vbar-mid{background:linear-gradient(180deg,#A8E6D0,var(--mint));}
+  .vbar-short{background:linear-gradient(180deg,#FFB3C1,#F06A82);}
+  .vbar-out{background:#E5E5E5;}
+  .vbar-label{font-size:9px;color:var(--text2);margin-top:4px;white-space:nowrap;font-weight:700;}
+  .vbar-col.out .vbar-val{color:#CCC;}
+
+  /* 未提出チップ */
+  .hc-unsub-chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .hc-unsub-chip{display:inline-flex;align-items:center;gap:4px;background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:800;color:#E65100;cursor:pointer;}
+  .hc-unsub-chip input{margin:0;cursor:pointer;}
+  .hc-unsub-chip.reminded{background:#E8F5E9;border-color:#A5D6A7;color:#2E7D32;}
   .hc-tab{flex:1;padding:10px;border:2px solid var(--line);border-radius:12px;background:#fff;font-weight:800;font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit;}
   .hc-tab.active{background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;border-color:transparent;}
   .hc-week-label{font-size:13px;font-weight:800;color:var(--text2);margin-bottom:12px;text-align:center;}
@@ -405,6 +458,66 @@ const DEFAULT_MIN_PEOPLE = {
 
 /* 時間帯キー変換 */
 function tzMinKey(tz){ return `h${tz.h}`; }
+
+/* ---------- 人数確認ブロック（募集バナーと完全一致） ----------
+   キャスト側の出勤募集バナーと同じ区切り。数字が食い違わないよう共通化。
+   各ブロックは「ブロック内で最も不足している時刻」の 人数/必要数 を表示。 */
+const HC_BLOCKS = [
+  { key:'noon',    label:'12-15', hours:[12,13,14,15] },
+  { key:'evening', label:'16-19', hours:[16,17,18,19] },
+  { key:'night',   label:'20-23', hours:[20,21,22,23] },
+  { key:'late',    label:'24-27', hours:[24,25,26,27] },
+];
+// 5時ラスト（end>=29）は専用集計
+
+// あるブロックの「最も不足している時刻」の情報を返す（募集ロジックと同一）
+function hcBlockInfo(block, ds, wk, castList, settings){
+  const mp = getMinPeople(settings);
+  const biz = getBizOfDay(ds, settings);
+  if(!biz) return null;
+  let worstShort=-Infinity, wCount=0, wMin=0, hasData=false;
+  block.hours.forEach(h=>{
+    if(h < biz.open || h >= biz.close) return;
+    const min = mp['h'+h] || 0;
+    if(!min) return;
+    hasData=true;
+    const cnt = castList.filter(c=>{
+      const w=Store.getWeek(c.name,wk);
+      return w && w.shifts && w.shifts[ds] && isWorkingAt(w.shifts[ds], h);
+    }).length;
+    const short = min - cnt;
+    if(short > worstShort){ worstShort=short; wCount=cnt; wMin=min; }
+  });
+  if(!hasData) return null;
+  return { count:wCount, min:wMin, shortage:Math.max(worstShort,0) };
+}
+
+// 5時ラスト（end>=29）の集計
+function hcLastInfo(ds, wk, castList, settings){
+  const mp = getMinPeople(settings);
+  const biz = getBizOfDay(ds, settings);
+  if(!biz || biz.close < 29) return null;
+  const min = mp['h29'] || 0;
+  if(!min) return null;
+  const cnt = castList.filter(c=>{
+    const w=Store.getWeek(c.name,wk);
+    return w && w.shifts && w.shifts[ds] && w.shifts[ds].end>=29;
+  }).length;
+  return { count:cnt, min:min, shortage:Math.max(min-cnt,0) };
+}
+
+// 12時出勤（start<=12）の集計 ※必要数はh12を流用
+function hcNoonStartInfo(ds, wk, castList, settings){
+  const mp = getMinPeople(settings);
+  const biz = getBizOfDay(ds, settings);
+  if(!biz) return null;
+  const min = mp['h12'] || 0;
+  const cnt = castList.filter(c=>{
+    const w=Store.getWeek(c.name,wk);
+    return w && w.shifts && w.shifts[ds] && w.shifts[ds].start!=null && w.shifts[ds].start<=12;
+  }).length;
+  return { count:cnt, min:min, shortage: min>0?Math.max(min-cnt,0):0 };
+}
 function getBizHours(settings){
   const bh = (settings && settings.businessHours) || {};
   return {
@@ -1626,13 +1739,14 @@ const StaffApp = (function(){
     const todayD=new Date(); todayD.setHours(12,0,0,0);
     const castStores=Store.getCastStores(castName);
     const dayStores=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
+    // ★ 店舗が0個のキャストは「チェックしようがない」ので対象外（誤判定防止）
+    if(dayStores.length===0) return false;
     for(let i=0;i<35;i++){
       const d=new Date(todayD); d.setDate(todayD.getDate()+i);
       const ds=ymd(d);
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(castName,wk);
       if(!w||!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) continue;
-      if(dayStores.length===0) return true;
       const allChecked=dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked) return true;
     }
@@ -2366,74 +2480,95 @@ const StaffApp = (function(){
     }
     // 未提出キャスト（長期休暇中を除外）
     const unsubmitted = castList.filter(c=>{
-      // その週に1日でも長期休暇受理がある場合は除外
       const hasVacation = dates.some(ds=>!!getVacationForCast(c.name, ds));
       if(hasVacation) return false;
       const w = Store.getWeek(c.name, wk);
       return !w || w.status==='unsubmitted';
     });
-    // 長期休暇中のキャスト一覧
     const onVacation = castList.filter(c=>{
       return dates.some(ds=>!!getVacationForCast(c.name, ds));
     });
 
-    // 日付ごと出勤人数（デフォルト全開）
-    const dateCards = dates.map(ds=>{
+    // シフト時間の短縮ラベル（start-end、翌時間は24引く）
+    function shortTime(sh){
+      if(!sh || sh.start==null) return '';
+      const f=(h)=>h>=24?(h-24):h;
+      return `${f(sh.start)}-${f(sh.end)}`;
+    }
+
+    // ブロックセルのHTML（人数/必要数、不足は⚠️赤）
+    function blockCell(info){
+      if(!info || info.min===0) return `<td class="hc-cell hc-cell-none">—</td>`;
+      const short = info.shortage>0;
+      return `<td class="hc-cell ${short?'hc-cell-short':''}">
+        <span class="hc-cell-num">${info.count}</span><span class="hc-cell-min">/${info.min}</span>${short?' ⚠️':''}
+      </td>`;
+    }
+
+    // テーブルの各行（日付ごと）
+    const rows = dates.map(ds=>{
       const biz = getBizOfDay(ds, settings);
       const dateMemo = (notes.dateMemos && notes.dateMemos[ds]) || '';
-      if(!biz) return `<div class="hc-date-card">
-        <div class="hc-date-row">
-          <span class="hc-date-label">${fmtDateLabel(ds)}</span>
-          <span class="hc-closed">— 休業日 —</span>
-        </div>
-      </div>`;
-      const working = castList.filter(c=>{
-        const w = Store.getWeek(c.name, wk);
-        return w && w.shifts && w.shifts[ds] && w.shifts[ds].start != null;
-      });
-      const count = working.length;
-      return `<div class="hc-date-card open">
-        <div class="hc-date-row" onclick="StaffApp.toggleHcDetail('${ds}')">
-          <span class="hc-date-label">${fmtDateLabel(ds)}</span>
-          <span class="hc-count">${count}人出勤</span>
-          <span class="hc-arrow" id="hca-${ds}" style="transform:rotate(90deg)">▶</span>
-        </div>
-        <div class="hc-detail" id="hcd-${ds}">
-          ${renderHcHours(ds, wk, castList, settings)}
-        </div>
-        <div class="hc-date-memo-row">
-          <input class="hc-date-memo" value="${esc(dateMemo)}" placeholder="この日のメモ…"
-            data-ds="${ds}" data-wk="${wk}">
-          <button class="hc-date-memo-btn" onclick="StaffApp.saveDateMemo('${wk}','${ds}',this.previousElementSibling.value)">保存</button>
-        </div>
-      </div>`;
+      const dlabel = fmtDateLabel(ds);
+      if(!biz){
+        return `<tr class="hc-trow">
+          <td class="hc-date-cell">${dlabel}</td>
+          <td class="hc-closed-cell" colspan="7">— 休業日 —</td>
+        </tr>
+        <tr class="hc-memo-trow"><td colspan="8">
+          <input class="hc-date-memo" value="${esc(dateMemo)}" placeholder="備考：この日のメモ…" data-ds="${ds}" data-wk="${wk}"
+            onchange="StaffApp.saveDateMemo('${wk}','${ds}',this.value)">
+        </td></tr>`;
+      }
+      // 出勤予定（名前(開始-終了)を並べる）
+      const working = castList.map(c=>{
+        const w=Store.getWeek(c.name,wk);
+        if(w && w.shifts && w.shifts[ds] && w.shifts[ds].start!=null){
+          return `${c.name}(${shortTime(w.shifts[ds])})`;
+        }
+        return null;
+      }).filter(Boolean);
+
+      const cells = HC_BLOCKS.map(b=>blockCell(hcBlockInfo(b, ds, wk, castList, settings))).join('');
+      const noonCell = blockCell(hcNoonStartInfo(ds, wk, castList, settings));
+      const lastCell = blockCell(hcLastInfo(ds, wk, castList, settings));
+
+      return `<tr class="hc-trow">
+        <td class="hc-date-cell">${dlabel} <span class="hc-zoom" onclick="StaffApp.toggleHcDetail('${ds}')" title="1時間ごとの詳細">🔍</span></td>
+        ${cells}
+        ${noonCell}
+        ${lastCell}
+        <td class="hc-plan-cell">${working.length? working.map(w=>`<span class="hc-plan-chip">${esc(w)}</span>`).join('') : '<span class="hc-plan-none">—</span>'}</td>
+      </tr>
+      <tr class="hc-detail-trow" id="hcdr-${ds}" style="display:none">
+        <td colspan="8"><div class="hc-detail-inner">${renderHcHours(ds, wk, castList, settings)}</div></td>
+      </tr>
+      <tr class="hc-memo-trow"><td colspan="8">
+        <input class="hc-date-memo" value="${esc(dateMemo)}" placeholder="備考：この日のメモ…" data-ds="${ds}" data-wk="${wk}"
+          onchange="StaffApp.saveDateMemo('${wk}','${ds}',this.value)">
+      </td></tr>`;
     }).join('');
 
     // 未提出一覧
     const unsubHtml = unsubmitted.length===0
       ? '<div class="hc-none">✅ 全員提出済み</div>'
-      : unsubmitted.map(c=>{
+      : `<div class="hc-unsub-chips">${unsubmitted.map(c=>{
           const reminded = (notes.remindedCasts||[]).includes(c.name);
-          return `<div class="hc-cast-row">
-            <span class="hc-cast-name">${esc(c.name)}</span>
-            <label class="hc-remind-label">
-              <input type="checkbox" class="hc-remind-chk" ${reminded?'checked':''}
-                onchange="StaffApp.toggleRemind('${wk}','${esc(c.name)}',this.checked)">
-              催促済み
-            </label>
-          </div>`;
-        }).join('');
+          return `<label class="hc-unsub-chip ${reminded?'reminded':''}">
+            <input type="checkbox" ${reminded?'checked':''} onchange="StaffApp.toggleRemind('${wk}','${esc(c.name)}',this.checked)">
+            ${esc(c.name)}${reminded?' ✓':''}
+          </label>`;
+        }).join('')}</div>`;
 
     // 長期休暇中一覧
     const vacHtml = onVacation.length===0 ? '' : `
-      <div class="hc-section-title" style="margin-top:14px">🏖 長期休暇中 <span class="hc-unsub-count">${onVacation.length}人</span></div>
+      <div class="hc-section-title" style="margin-top:16px">🏖 長期休暇中 <span class="hc-unsub-count">${onVacation.length}人</span></div>
       <div class="hc-vac-cal">
         ${onVacation.map(c=>{
           const vacDays = dates.filter(ds=>!!getVacationForCast(c.name, ds));
           const memo = vacDays.length>0 ? (getVacationForCast(c.name, vacDays[0]).memo||'') : '';
           const dayLabels = vacDays.map(ds=>{
-            const d=new Date(ds+'T12:00:00');
-            return `${d.getMonth()+1}/${d.getDate()}`;
+            const d=new Date(ds+'T12:00:00'); return `${d.getMonth()+1}/${d.getDate()}`;
           }).join('・');
           return `<div class="hc-vac-row">
             <span class="hc-cast-name">${esc(c.name)}</span>
@@ -2445,29 +2580,43 @@ const StaffApp = (function(){
 
     cont.innerHTML = `
       <div class="hc-tabs">${tabHtml}</div>
-      <div class="hc-week-label">${weekLabel(wk)}</div>
-      <div class="hc-section-title">📊 日別出勤人数</div>
-      <div class="hc-dates">${dateCards}</div>
-      <div class="hc-section-title" style="margin-top:14px">
+
+      <div class="hc-section-title" style="margin-top:4px">
         ⚠️ 未提出キャスト <span class="hc-unsub-count">${unsubmitted.length}人</span>
       </div>
       <div class="hc-unsub-list">${unsubHtml}</div>
       ${vacHtml}
-      <div class="hc-section-title" style="margin-top:14px">🗒 備考欄</div>
+
+      <div class="hc-table-title">🕐 時間帯別 在籍人数 <span class="hc-table-sub">${weekLabel(wk)}</span></div>
+      <div class="hc-table-wrap">
+        <table class="hc-table">
+          <thead>
+            <tr>
+              <th class="hc-th-date">日付</th>
+              <th>12-15</th><th>16-19</th><th>20-23</th><th>24-27</th>
+              <th>12時<br>出勤</th><th>5時<br>ラスト</th>
+              <th class="hc-th-plan">出勤予定</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+
+      <div class="hc-section-title" style="margin-top:16px">🗒 この週の備考欄</div>
       <div style="display:flex;gap:8px;align-items:flex-start">
         <textarea class="hc-memo" id="hcWeekMemo" placeholder="この週のメモ（内勤のみ）">${esc(notes.memo||'')}</textarea>
         <button class="hc-date-memo-btn" style="white-space:nowrap;padding:10px 14px" onclick="StaffApp.saveHcMemo('${wk}',document.getElementById('hcWeekMemo').value)">保存</button>
       </div>
-      <div style="margin-top:14px;display:flex;justify-content:flex-end">
-        <span style="font-size:11px;color:var(--text2)">📢 出勤募集情報は毎朝9時に自動更新されてキャストに通知されます</span>
+      <div style="margin-top:12px;display:flex;justify-content:flex-end">
+        <span style="font-size:11px;color:var(--text2)">📢 出勤募集情報は毎朝9時に自動更新されてキャストに通知されます（この表と同じ集計です）</span>
       </div>`;
   }
 
   function renderHcHours(ds, wk, castList, settings){
     const mp = getMinPeople(settings);
     const biz = getBizOfDay(ds, settings);
-    return TIME_ZONES.map(tz=>{
-      // 営業時間外判定
+    // 縦棒グラフ（1時間ごと）
+    const bars = TIME_ZONES.map(tz=>{
       const outOfHours = biz && (tz.h < biz.open || tz.h >= biz.close);
       const count = castList.filter(c=>{
         const w = Store.getWeek(c.name, wk);
@@ -2476,21 +2625,25 @@ const StaffApp = (function(){
       }).length;
       const min = mp[tzMinKey(tz)] || 0;
       const shortage = !outOfHours && min > 0 && count < min;
+      const shortLabel = tz.label.replace('時','').replace('(翌5時)','翌5');
       if(outOfHours){
-        return `<div class="hc-hour-row out-of-hours">
-          <span class="hc-hour-label">${tz.label}</span>
-          <span class="hc-out-label">— 営業時間外 —</span>
+        return `<div class="vbar-col out">
+          <div class="vbar-val">–</div>
+          <div class="vbar-track"><div class="vbar-fill vbar-out" style="height:4px"></div></div>
+          <div class="vbar-label">${shortLabel}</div>
         </div>`;
       }
-      const pct = min>0 ? Math.min(count/min*100,100) : Math.min(count*20,100);
-      return `<div class="hc-hour-row ${shortage?'shortage':''}">
-        <span class="hc-hour-label">${tz.label}</span>
-        <div class="hc-bar-wrap">
-          <div class="hc-bar" style="width:${pct}%"></div>
-        </div>
-        <span class="hc-hour-count ${shortage?'shortage-txt':''}">${count}人${shortage?` <span class="shortage-badge">-${min-count}</span>`:''}</span>
+      // 棒の高さ：必要数を100%基準（最大は必要数の1.5倍で頭打ち）、色で充足判定
+      const base = min>0 ? min : Math.max(count,1);
+      const pct = Math.min(count/base*70, 100);
+      const color = shortage ? 'vbar-short' : (count>=base ? 'vbar-full' : 'vbar-mid');
+      return `<div class="vbar-col">
+        <div class="vbar-val ${shortage?'vbar-val-short':''}">${count}${min>0?`<span class="vbar-min">/${min}</span>`:''}</div>
+        <div class="vbar-track"><div class="vbar-fill ${color}" style="height:${Math.max(pct,6)}%"></div></div>
+        <div class="vbar-label">${shortLabel}</div>
       </div>`;
     }).join('');
+    return `<div class="vbar-chart">${bars}</div>`;
   }
 
   function fmtDateLabel(ds){
@@ -2507,12 +2660,9 @@ const StaffApp = (function(){
   }
 
   function toggleHcDetail(ds){
-    const el = document.getElementById('hcd-'+ds);
-    const arrow = document.getElementById('hca-'+ds);
+    const el = document.getElementById('hcdr-'+ds);
     if(!el) return;
-    const open = el.style.display!=='none';
-    el.style.display = open ? 'none' : '';
-    if(arrow) arrow.style.transform = open ? '' : 'rotate(90deg)';
+    el.style.display = el.style.display==='none' ? '' : 'none';
   }
 
   async function saveDateMemo(wk, ds, memo){

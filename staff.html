@@ -2413,7 +2413,8 @@ const StaffApp = (function(){
     renderFilterChips();
     // 本日入力可能：未入力があるキャストへジャンプ
     if(f==='today'){
-      const targets = Store.getCastList().filter(c=>_hasUncheckedToday(c.name));
+      const targets = Store.getCastList().filter(c=>_hasUncheckedToday(c.name))
+        .sort((a,b)=>a.name.localeCompare(b.name,'ja'));  // あいうえお順
       if(targets.length===0){
         renderCastList();
         toast('本日入力可能なキャストはいません✨');

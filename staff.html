@@ -1696,33 +1696,48 @@ const StaffApp = (function(){
   }
 
   // 最短入力可能日の行全体をメタリックピンクでくるくる3周
-  function _jumpToFirstEditable(name){
-    const castEl = document.getElementById('cast-'+cssEscape(name));
-    if(!castEl) return;
+  async function _jumpToFirstEditable(name){
     const today = ymd(new Date());
+    const todayD = new Date(); todayD.setHours(0,0,0,0);
     const curWk = weekKeyOf(today);
-
-    // 未チェック日を探す（今日以降・表示中の月のみ）
     const castStores = Store.getCastStores(name);
     const dayStores = ['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
-    const weeks = weeksInMonth(viewYM); // 表示中の月のみ（DOMに存在する範囲）
+
+    // ★ 月をまたいで「今日〜35日先」で最初の未チェック日を探す
     let targetDs=null;
-    for(const wk of weeks){
+    for(let i=0;i<35;i++){
+      const d=new Date(todayD); d.setDate(todayD.getDate()+i);
+      const ds=ymd(d);
+      const wk=weekKeyOf(ds);
       const w=Store.getWeek(name,wk);
       if(!w) continue;
       if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
-      for(const ds of weekDates(wk)){
-        if(ds<today) continue;
-        const sh=w.shifts&&w.shifts[ds];
-        if(!sh||sh.start==null) continue;
-        const allChecked=dayStores.length>0&&dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
-        if(!allChecked){ targetDs=ds; break; }
-      }
-      if(targetDs) break;
+      const sh=w.shifts&&w.shifts[ds];
+      if(!sh||sh.start==null) continue;
+      const allChecked=dayStores.length>0&&dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+      if(!allChecked){ targetDs=ds; break; }
     }
 
+    // ★ 未チェック日が別の月にあれば、その月へ自動で切り替えてから光らせる
     if(targetDs){
-      // 最短未チェック日の行にジャンプ＋くるくる（data-ds で確実マッチ）
+      const targetYM = targetDs.slice(0,7);
+      if(targetYM !== viewYM){
+        viewYM = targetYM;
+        const lbl=document.getElementById('staffMonthLabel');
+        if(lbl){ const[y,m]=viewYM.split('-').map(Number); lbl.textContent=`${y}年 ${m}月`; }
+        expandedCast = name;
+        setBusy(true,'読み込み中…');
+        await StaffGas.loadMonthAll(viewYM);
+        setBusy(false);
+        renderCastList();
+        await new Promise(r=>setTimeout(r,150));
+      }
+    }
+
+    const castEl = document.getElementById('cast-'+cssEscape(name));
+    if(!castEl) return;
+
+    if(targetDs){
       const targetRow=castEl.querySelector(`.check-row[data-ds="${targetDs}"]`);
       if(targetRow){
         targetRow.scrollIntoView({behavior:'smooth',block:'center'});
@@ -1730,7 +1745,7 @@ const StaffApp = (function(){
         setTimeout(()=>targetRow.classList.remove('row-spin'),2400);
       }
     } else {
-      // 未チェックなし→今週ブロック全体をくるくる（data-wk で確実マッチ）
+      // 未チェックなし→今週ブロック全体をくるくる
       const curBlock=castEl.querySelector(`.week-block[data-wk="${curWk}"]`);
       if(curBlock){
         curBlock.scrollIntoView({behavior:'smooth',block:'center'});
@@ -2375,8 +2390,11 @@ const StaffApp = (function(){
       // 対象が1件なら開く、複数なら expandedCast はそのまま（全員開くと重い）
       if(targets.length===1) expandedCast = targets[0].name;
       renderCastList();
-      setTimeout(()=>{
-        targets.forEach(c=>_jumpToFirstEditable(c.name));
+      setTimeout(async ()=>{
+        // 最初の対象で月切替まで行う（別月に未入力がある場合はその月へ）
+        for(const c of targets){
+          await _jumpToFirstEditable(c.name);
+        }
       }, 150);
     } else {
       renderCastList();

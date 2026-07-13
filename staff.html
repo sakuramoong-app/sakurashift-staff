@@ -1747,7 +1747,9 @@ const StaffApp = (function(){
   /* 今日に未チェックがあるか判定 */
   function _hasUncheckedToday(castName){
     // 今日〜5週間先（35日）までに「シフトあり＆未チェック」の日があるか
-    const todayD=new Date(); todayD.setHours(12,0,0,0);
+    // ★ 過去日は含めない（今日以降のみ）
+    const todayD=new Date(); todayD.setHours(0,0,0,0);
+    const todayStr=ymd(todayD);
     const castStores=Store.getCastStores(castName);
     const dayStores=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
     // ★ 店舗が0個のキャストは「チェックしようがない」ので対象外（誤判定防止）
@@ -1755,6 +1757,8 @@ const StaffApp = (function(){
     for(let i=0;i<35;i++){
       const d=new Date(todayD); d.setDate(todayD.getDate()+i);
       const ds=ymd(d);
+      // 念のため過去日を明示的にスキップ（今日以降のみ対象）
+      if(ds < todayStr) continue;
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(castName,wk);
       if(!w||!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) continue;
@@ -2309,7 +2313,7 @@ const StaffApp = (function(){
           +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(_auditDetail({action:l.type}))}</span> `
           +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span>`
           +(l.cast?` → <span style="font-weight:700">${esc(l.cast)}</span>`:'')
-          +(l.detail&&l.detail!==_auditDetail({action:l.type})?` <span style="color:var(--text2);font-size:12px">${esc(l.detail)}</span>`:'');
+          +(l.detail&&l.detail!==_auditDetail({action:l.type})?`<div style="color:var(--text2);font-size:12px;margin-top:3px;white-space:pre-wrap;line-height:1.5;padding-left:8px">${esc(l.detail)}</div>`:'');
         body.appendChild(row);
       });
     }

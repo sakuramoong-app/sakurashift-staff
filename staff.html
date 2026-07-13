@@ -1696,6 +1696,32 @@ const StaffApp = (function(){
   }
 
   // 最短入力可能日の行全体をメタリックピンクでくるくる3周
+  // スクロール・月切替せず、今表示中の月に未入力があればキラキラだけ（複数キャスト時のガクガク防止）
+  function _glowIfVisible(name){
+    const castEl = document.getElementById('cast-'+cssEscape(name));
+    if(!castEl) return;
+    const today = ymd(new Date());
+    const castStores = Store.getCastStores(name);
+    const dayStores = ['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
+    if(dayStores.length===0) return;
+    for(const wk of weeksInMonth(viewYM)){
+      const w=Store.getWeek(name,wk);
+      if(!w) continue;
+      if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
+      for(const ds of weekDates(wk)){
+        if(ds<today) continue;
+        const sh=w.shifts&&w.shifts[ds];
+        if(!sh||sh.start==null) continue;
+        const allChecked=dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+        if(!allChecked){
+          const row=castEl.querySelector(`.check-row[data-ds="${ds}"]`);
+          if(row){ row.classList.add('row-spin'); setTimeout(()=>row.classList.remove('row-spin'),2400); }
+          return;
+        }
+      }
+    }
+  }
+
   async function _jumpToFirstEditable(name){
     const today = ymd(new Date());
     const todayD = new Date(); todayD.setHours(0,0,0,0);
@@ -2385,19 +2411,32 @@ const StaffApp = (function(){
   function setFilter(f){
     filter=f;
     renderFilterChips();
-    // 本日入力可能：対象キャストのアコーディオンを全部開いてから点滅
+    // 本日入力可能：未入力があるキャストへジャンプ
     if(f==='today'){
-      const today = ymd(new Date());
       const targets = Store.getCastList().filter(c=>_hasUncheckedToday(c.name));
-      // 対象が1件なら開く、複数なら expandedCast はそのまま（全員開くと重い）
-      if(targets.length===1) expandedCast = targets[0].name;
-      renderCastList();
-      setTimeout(async ()=>{
-        // 最初の対象で月切替まで行う（別月に未入力がある場合はその月へ）
-        for(const c of targets){
-          await _jumpToFirstEditable(c.name);
-        }
-      }, 150);
+      if(targets.length===0){
+        renderCastList();
+        toast('本日入力可能なキャストはいません✨');
+      } else if(targets.length===1){
+        // 1人だけ → その人を開いてジャンプ＆キラキラ
+        expandedCast = targets[0].name;
+        renderCastList();
+        setTimeout(()=>{ _jumpToFirstEditable(targets[0].name); }, 150);
+      } else {
+        // 複数 → 最初の1人だけスクロール＆キラキラ（ガクガク防止）
+        // 残りはアコーディオンを開いてキラキラだけ（スクロールで追いかけない）
+        expandedCast = targets[0].name;
+        renderCastList();
+        setTimeout(async ()=>{
+          // 先頭だけ月切替＆スクロール
+          await _jumpToFirstEditable(targets[0].name);
+          // 残りは静かにキラキラ（スクロールなし・月切替なし＝現在表示中の月にいる分だけ）
+          for(let i=1;i<targets.length;i++){
+            _glowIfVisible(targets[i].name);
+          }
+          toast(`${targets.length}人に本日入力可能があります（先頭にジャンプしました）`);
+        }, 150);
+      }
     } else {
       renderCastList();
     }

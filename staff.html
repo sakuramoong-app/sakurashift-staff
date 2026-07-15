@@ -1429,8 +1429,17 @@ const StaffGas = {
     try{
       await this._post({action:'addNotification', role:'cast', castName, type, message});
       // メール送信（キャストへ：メールアドレス未登録なら無視される）
+      // 件名は種類ごとに分かりやすく
+      const subjTag = {
+        done:            '🎉【シフト確定】',
+        change_done:     '🎉【変更確定】',
+        change:          '🔄【変更申請 確認中】',
+        reject:          '🙏【変更申請 却下】',
+        vacation_accepted:'🏖️【長期休暇 承認】',
+        vacation_rejected:'🙏【長期休暇 却下】',
+      }[type] || '📢【お知らせ】';
       this._post({action:'sendEmail', toRole:'cast', toCast:castName,
-        subject:'【サクラシフト】'+message,
+        subject:subjTag+message,
         htmlBody:'<div style="font-family:-apple-system,sans-serif;padding:20px;max-width:480px;margin:0 auto">'
           +'<div style="background:linear-gradient(135deg,#A7E8C8,#5FD0A0);border-radius:14px;padding:16px 20px;margin-bottom:18px">'
           +'<span style="font-size:22px">🌸</span>'
@@ -1608,7 +1617,7 @@ const StaffApp = (function(){
         const firstDs = it.dates[0]||'';
         const firstWk = firstDs ? weekKeyOf(firstDs) : '';
         return `<div class="inbox-item vacation" onclick="StaffApp.jumpToCast('${esc(it.cast)}','${firstWk}','${firstDs}')">
-          <span class="inbox-icon">🏖</span>
+          <span class="inbox-icon">🏖️</span>
           <span class="inbox-cast">${esc(it.cast)}</span>
           <span class="inbox-week">${esc(it.label)}${it.memo?' 「'+esc(it.memo)+'」':''}</span>
           <div class="inbox-vac-btns">
@@ -2046,9 +2055,9 @@ const StaffApp = (function(){
       const dateCell=`<div class="day-fixed ${isRest?'rest':''} ${vacation?'day-vacation':''}">
         <div class="day-date"><span class="d-md">${md}</span><span class="d-dow ${dcls}">(${dows[i]})</span></div>
         ${vacation
-          ? `<div class="vacation-label">🏖 ${esc(vacation.memo||'休暇')} <span onclick="event.stopPropagation();StaffApp.cancelVacationDay('${esc(c.name)}','${wk}','${ds}')" title="取り消し" style="cursor:pointer;color:#E05260;font-weight:900;margin-left:4px;">✕</span></div>`
+          ? `<div class="vacation-label">🏖️ ${esc(vacation.memo||'休暇')} <span onclick="event.stopPropagation();StaffApp.cancelVacationDay('${esc(c.name)}','${wk}','${ds}')" title="取り消し" style="cursor:pointer;color:#E05260;font-weight:900;margin-left:4px;">✕</span></div>`
           : vacReq
-            ? `<div class="vacation-req-label">🏖 申請中</div>`
+            ? `<div class="vacation-req-label">🏖️ 申請中</div>`
             : sh
               ? `<div class="shift-big">⏰ ${fmtShift(sh.start,sh.end)}${kanzen?'<span class="kanzen-ico"> 完🔵</span>':''}</div>`
               : '<div class="rest-cell">お休み</div>'
@@ -2639,7 +2648,7 @@ const StaffApp = (function(){
     const vacHtml = onVacation.length===0 ? '' : `
       <div class="hc-vac-acc">
         <div class="hc-vac-acc-head" onclick="StaffApp.toggleVacAcc()">
-          <span>🏖 長期休暇中 <span class="hc-unsub-count">${onVacation.length}人</span></span>
+          <span>🏖️ 長期休暇中 <span class="hc-unsub-count">${onVacation.length}人</span></span>
           <span id="hcVacArrow" style="transition:transform .2s">▶</span>
         </div>
         <div class="hc-vac-cal" id="hcVacBody" style="display:none;margin-top:10px">
@@ -2879,7 +2888,7 @@ const StaffApp = (function(){
     modal.innerHTML=`
       <div style="position:absolute;inset:0;background:rgba(0,0,0,.4)" id="vacAddBg"></div>
       <div style="position:relative;background:#fff;border-radius:18px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.25);padding:22px">
-        <div style="font-size:17px;font-weight:900;color:var(--text);margin-bottom:4px">🏖 長期休暇を追加</div>
+        <div style="font-size:17px;font-weight:900;color:var(--text);margin-bottom:4px">🏖️ 長期休暇を追加</div>
         <div style="font-size:13px;color:var(--text2);margin-bottom:16px">${dateLabel} に長期休暇を登録します</div>
         <div style="font-size:12px;font-weight:800;color:var(--text2);margin-bottom:6px">キャストを選択</div>
         <select id="vacAddCast" style="width:100%;padding:11px;border:2px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;margin-bottom:14px">
@@ -2917,7 +2926,7 @@ const StaffApp = (function(){
       if(ok){
         renderHeadcount();
         await saveNow();
-        toast(`${cast}さんの長期休暇を追加しました🏖`);
+        toast(`${cast}さんの長期休暇を追加しました🏖️`);
       }
     });
   }

@@ -1731,6 +1731,10 @@ const StaffApp = (function(){
     }
   }
 
+  // 「本日入力可能」で見る範囲：今日から何日先まで（全媒体共通）
+  // ※媒体ごとに入力可能日数は違うが、管理を単純にして誤判定を防ぐため一律にする
+  const TODAY_EDITABLE_DAYS = 28;
+
   async function _jumpToFirstEditable(name){
     const today = ymd(new Date());
     const todayD = new Date(); todayD.setHours(0,0,0,0);
@@ -1738,9 +1742,9 @@ const StaffApp = (function(){
     const castStores = Store.getCastStores(name);
     const dayStores = ['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
 
-    // ★ 月をまたいで「今日〜35日先」で最初の未チェック日を探す
+    // ★ 月をまたいで「今日〜TODAY_EDITABLE_DAYS日先」で最初の未チェック日を探す
     let targetDs=null;
-    for(let i=0;i<35;i++){
+    for(let i=0;i<TODAY_EDITABLE_DAYS;i++){
       const d=new Date(todayD); d.setDate(todayD.getDate()+i);
       const ds=ymd(d);
       const wk=weekKeyOf(ds);
@@ -1798,7 +1802,7 @@ const StaffApp = (function(){
   /* ⑤⑥ フィルター件数カウント */
   /* 今日に未チェックがあるか判定 */
   function _hasUncheckedToday(castName){
-    // 今日〜5週間先（35日）までに「シフトあり＆未チェック」の日があるか
+    // 今日〜TODAY_EDITABLE_DAYS日先までに「シフトあり＆未チェック」の日があるか
     // ★ 過去日は含めない（今日以降のみ）
     const todayD=new Date(); todayD.setHours(0,0,0,0);
     const todayStr=ymd(todayD);
@@ -1806,7 +1810,7 @@ const StaffApp = (function(){
     const dayStores=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'].filter(m=>castStores.includes(m));
     // ★ 店舗が0個のキャストは「チェックしようがない」ので対象外（誤判定防止）
     if(dayStores.length===0) return false;
-    for(let i=0;i<35;i++){
+    for(let i=0;i<TODAY_EDITABLE_DAYS;i++){
       const d=new Date(todayD); d.setDate(todayD.getDate()+i);
       const ds=ymd(d);
       // 念のため過去日を明示的にスキップ（今日以降のみ対象）

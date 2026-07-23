@@ -2091,7 +2091,11 @@ const StaffApp = (function(){
     if(hasShift){
       // 残り一括ボタンは日付横の一括ボタンに統合したため削除
     }
-    if(st==='waiting'||st==='inputting'){
+    // ★ 確認通知ボタンは waiting（提出済み・未通知）のときだけ表示する
+    //   inputting（内勤入力中）は既に通知済みなので出さない
+    //   （チェックを1つ入れると confirmed→inputting に落ちるため、
+    //     ここに inputting を含めるとボタンが再点灯してしまう）
+    if(st==='waiting'){
       actions+=`<button class="btn-sm btn-update confirm-btn metal-glow" data-confirm-wk="${wk}" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">📤 キャストへ確認通知を送信</button>`;
     } else if(st==='change_requested'){
       actions+=`<button class="btn-sm btn-accept metal-glow" onclick="StaffApp.acceptChange('${esc(c.name)}','${wk}')">✅ 受理</button>

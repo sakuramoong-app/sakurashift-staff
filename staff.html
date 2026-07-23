@@ -42,6 +42,15 @@
   .inbox-range{font-size:11px;color:var(--text2);font-weight:600;margin-left:2px;}
   .inbox-bulk-btn{margin-left:auto;padding:5px 12px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-size:11.5px;font-weight:800;cursor:pointer;font-family:inherit;display:none;}
   .inbox-bulk-btn.show{display:inline-block;}
+  /* 受信ボックス一括ボタンも金ぴか常時（表示中ずっと光る） */
+  .inbox-bulk-btn.show{
+    background:linear-gradient(110deg,#FFD700 0%,#FFF6C0 20%,#FFB800 40%,#FFF6C0 60%,#FFD700 80%,#FFB800 100%);
+    background-size:200% auto;
+    color:#7A5C00;
+    border:2px solid #FFD700;
+    animation:metalShine 2s linear infinite,metalPulse 1.2s ease-in-out infinite;
+    text-shadow:0 1px 1px rgba(255,255,255,.6);
+  }
   .inbox-badge{background:var(--pink-deep);color:#fff;font-size:11px;font-weight:800;border-radius:10px;padding:1px 9px;}
   .inbox-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:11px;background:#FFFCF4;margin-bottom:6px;cursor:pointer;transition:background .15s;border:1.5px solid #FBEFC9;}
   .inbox-item:hover{background:#FFF6E0;}
@@ -99,6 +108,16 @@
   .btn-reject{background:#fff;border:1.5px solid #FFB9B9;color:#E0568A;}
   .btn-sm:active{transform:scale(.95);}
   .cr-info{background:#FFF0F6;border:1.5px solid #FAD9E7;border-radius:11px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;font-weight:700;color:#C2185B;line-height:1.7;}
+  /* 変更履歴 */
+  .day-hist-mark{font-size:9.5px;font-weight:800;color:#7B1FA2;background:#F3E5F5;border:1px solid #E1BEE7;border-radius:5px;padding:1px 5px;line-height:1.4;text-align:center;margin-top:2px;cursor:pointer;white-space:nowrap;}
+  .day-hist-mark:hover{background:#E1BEE7;}
+  .chg-hist{background:#F8F4FC;border:1.5px solid #E1D3EE;border-radius:11px;margin-bottom:10px;overflow:hidden;}
+  .chg-hist>summary{padding:9px 13px;font-size:12.5px;font-weight:800;color:#7B1FA2;cursor:pointer;list-style:none;user-select:none;}
+  .chg-hist>summary::-webkit-details-marker{display:none;}
+  .chg-hist>summary::before{content:'▸ ';}
+  .chg-hist[open]>summary::before{content:'▾ ';}
+  .chg-hist-body{padding:2px 13px 11px;font-size:12px;font-weight:700;color:#4A5560;line-height:1.75;}
+  .chg-hist-sep{border:none;border-top:1.5px dashed #E1D3EE;margin:8px 0;}
   .check-rows{display:flex;flex-direction:column;gap:3px;}
   .check-row{display:flex;gap:0;background:#fff;border-radius:10px;border:1.5px solid #CFE5DA;overflow:hidden;}
   .check-row.row-rest{background:#FAFBFC;opacity:.85;}
@@ -154,7 +173,9 @@
     0%,100%{box-shadow:0 0 8px rgba(255,215,0,.5),0 3px 10px rgba(0,0,0,.2);transform:scale(1);}
     50%{box-shadow:0 0 20px rgba(255,215,0,.9),0 3px 14px rgba(0,0,0,.3);transform:scale(1.06);}
   }
-  .confirm-btn.metal-glow{
+  .confirm-btn.metal-glow,
+  .btn-accept.metal-glow,
+  .btn-reject.metal-glow{
     background:linear-gradient(110deg,#FFD700 0%,#FFF6C0 20%,#FFB800 40%,#FFF6C0 60%,#FFD700 80%,#FFB800 100%)!important;
     background-size:200% auto!important;
     color:#7A5C00!important;
@@ -371,7 +392,7 @@
     </div>
 
     <div class="inbox-card">
-      <div class="inbox-title">📥 受信ボックス <span class="inbox-badge" id="inboxCount">0</span><span class="inbox-range">（全期間）</span><button class="inbox-bulk-btn" id="inboxBulkBtn" onclick="StaffApp.bulkConfirmAll()">✅ 提出済みを一括確定</button></div>
+      <div class="inbox-title">📥 受信ボックス <span class="inbox-badge" id="inboxCount">0</span><span class="inbox-range">（全期間）</span><button class="inbox-bulk-btn" id="inboxBulkBtn" onclick="StaffApp.bulkConfirmAll()">📤 一括でキャストへ確認通知を送信</button></div>
       <div id="inboxBox"></div>
     </div>
 
@@ -572,7 +593,7 @@ const TRANSITIONS = {
   waiting:          ['inputting','confirmed','unsubmitted'], // キャストが取り下げ可能
   inputting:        ['confirmed','waiting'],
   confirmed:        ['change_requested'],
-  change_requested: ['change_inputting','confirmed'],
+  change_requested: ['change_confirmed','change_inputting','confirmed'],
   change_inputting: ['change_confirmed','confirmed'],
   change_confirmed: ['change_requested'],
 };
@@ -889,6 +910,25 @@ const Store = (function(){
     dirty.add(cast + '|' + wk);
   }
 
+  // その週が「全出勤日×全所属店舗」チェック済みか判定
+  function _isWeekFullyChecked(cast, wk, w){
+    w = w || _ensureWeek(cast, wk);
+    const stores = getCastStores(cast);
+    if(stores.length===0) return false; // 店舗未設定はチェック不能→確定にしない
+    const dates = weekDatesInternal(wk);
+    let hasAnyShift=false;
+    for(const ds of dates){
+      const sh = w.shifts && w.shifts[ds];
+      if(!sh || sh.start==null) continue; // 出勤日のみ対象
+      hasAnyShift=true;
+      for(const m of stores){
+        const ck = w.checks && w.checks[ds+'_'+m];
+        if(!ck || !ck.checked) return false; // 1つでも未チェックなら未完了
+      }
+    }
+    return hasAnyShift; // シフトが1日もなければ確定にしない
+  }
+
   function dispatch(action, payload){
     const p = payload || {};
     switch(action){
@@ -1136,7 +1176,15 @@ const Store = (function(){
         const ckey = p.ds + '_' + p.media;
         if(p.checked){ w.checks[ckey] = {checked:true, by:p.by||'', color:p.color||'', at:new Date().toISOString()}; }
         else { delete w.checks[ckey]; }
-        if(w.status==='waiting' && canTransition('waiting','inputting')) w.status='inputting';
+        // ★ チェックの進み具合でステータス自動判定
+        //   全媒体・全出勤日がチェック済み → confirmed（確定）
+        //   未チェックが残る → inputting（内勤入力中）
+        //   ※waiting/change_requested（確認通知前）はUIでチェック自体をブロックしているのでここには来ない
+        if(w.status==='inputting' || w.status==='confirmed'){
+          w.status = _isWeekFullyChecked(p.cast, p.wk, w) ? 'confirmed' : 'inputting';
+        } else if(w.status==='change_inputting' || w.status==='change_confirmed'){
+          w.status = _isWeekFullyChecked(p.cast, p.wk, w) ? 'change_confirmed' : 'change_inputting';
+        }
         _touch(p.cast, p.wk, p.by || (state.currentStaffName));
         break;
       }
@@ -1160,17 +1208,24 @@ const Store = (function(){
       case 'REQUEST_CHANGE': {
         const w = _ensureWeek(p.cast, p.wk);
         if(!canTransition(w.status,'change_requested')) return {error:'BAD_TRANSITION'};
-        w.changeRequest = p.changes;
+        // ★ 連続申請対応：既存の申請を消さず日付単位でマージ
+        const merged = Object.assign({}, w.changeRequest || {});
+        for(const ds in (p.changes||{})){ merged[ds] = p.changes[ds]; }
+        w.changeRequest = merged;
         w.status = 'change_requested';
         _touch(p.cast, p.wk, p.cast);
         break;
       }
 
+      // ★ 受理＝変更内容をシフトに反映して「変更確定」まで完了させる
+      //   （旧「変更を反映して確定」ボタンの役割をここに統合）
       case 'ACCEPT_CHANGE': {
         const w = _ensureWeek(p.cast, p.wk);
-        if(!canTransition(w.status,'change_inputting')) return {error:'BAD_TRANSITION'};
+        if(!canTransition(w.status,'change_confirmed')) return {error:'BAD_TRANSITION'};
         const before = _statusSnapshot(w);
-        w.status = 'change_inputting';
+        _applyChangeRequest(w, p.cast, p.wk);
+        w.status = 'change_confirmed';
+        w.confirmedBy = p.by || state.currentStaffName || '';
         _touch(p.cast, p.wk, state.currentStaffName);
         _audit('ACCEPT_CHANGE', p.cast, p.wk, before, _statusSnapshot(w), p.by || state.currentStaffName, 'staff');
         break;
@@ -1227,23 +1282,47 @@ const Store = (function(){
 
   function _applyChangeRequest(w, cast, wk){
     if(!w.changeRequest) return;
+    if(!w.changeHistory) w.changeHistory = {};
+    const _at = nowIso();
+    const _by = state.currentStaffName || '';
     for(const ds in w.changeRequest){
       const ch = w.changeRequest[ds];
+      // ★ 変更前のシフト内容を退避（履歴用）
+      const beforeShift = w.shifts[ds] ? {start:w.shifts[ds].start, end:w.shifts[ds].end} : null;
+
       if(ch.type==='holiday'){
         delete w.shifts[ds];
       } else {
         w.shifts[ds] = {start:ch.start, end:ch.end, memo:(w.shifts[ds]&&w.shifts[ds].memo)||''};
       }
+
+      // ★ 解除されるチェック（＝入力し直しが必要な媒体）を記録してから削除
+      const clearedMedia = [];
       for(const ckey in w.checks){
-        if(ckey.indexOf(ds+'_')===0) delete w.checks[ckey];
+        if(ckey.indexOf(ds+'_')===0){
+          clearedMedia.push(ckey.slice(ds.length+1));
+          delete w.checks[ckey];
+        }
       }
+
+      if(!w.changeHistory[ds]) w.changeHistory[ds] = [];
+      w.changeHistory[ds].push({
+        at: _at,
+        by: _by,
+        type: ch.type==='holiday' ? 'holiday' : 'time',
+        before: beforeShift,
+        after: ch.type==='holiday' ? null : {start:ch.start, end:ch.end},
+        reason: ch.reason || '',
+        clearedMedia: clearedMedia
+      });
     }
     w.changeRequest = null;
   }
 
   function canEditByStatus(status){
-    // unsubmitted（未提出）・waiting（提出済みだが内勤未操作）・change_inputting（変更受理後）は編集可能
-    return status==='unsubmitted' || status==='waiting' || status==='change_inputting' || isEditable(status);
+    // unsubmitted（未提出）・waiting（提出済みだが内勤未操作）は編集可能
+    // ※確認通知を送った時点／変更申請を受理した時点で週はロックされる
+    return status==='unsubmitted' || status==='waiting' || isEditable(status);
   }
 
   function subscribe(fn){ listeners.push(fn); }
@@ -2013,12 +2092,10 @@ const StaffApp = (function(){
       // 残り一括ボタンは日付横の一括ボタンに統合したため削除
     }
     if(st==='waiting'||st==='inputting'){
-      actions+=`<button class="btn-sm btn-update confirm-btn" data-confirm-wk="${wk}" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 確定する</button>`;
+      actions+=`<button class="btn-sm btn-update confirm-btn metal-glow" data-confirm-wk="${wk}" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">📤 キャストへ確認通知を送信</button>`;
     } else if(st==='change_requested'){
-      actions+=`<button class="btn-sm btn-accept" onclick="StaffApp.acceptChange('${esc(c.name)}','${wk}')">✅ 受理</button>
-               <button class="btn-sm btn-reject" onclick="StaffApp.rejectChange('${esc(c.name)}','${wk}')">🙅 却下</button>`;
-    } else if(st==='change_inputting'){
-      actions+=`<button class="btn-sm btn-update confirm-btn" data-confirm-wk="${wk}" onclick="StaffApp.confirmWeek('${esc(c.name)}','${wk}')">🔄 変更を反映して確定</button>`;
+      actions+=`<button class="btn-sm btn-accept metal-glow" onclick="StaffApp.acceptChange('${esc(c.name)}','${wk}')">✅ 受理</button>
+               <button class="btn-sm btn-reject metal-glow" onclick="StaffApp.rejectChange('${esc(c.name)}','${wk}')">🙅 却下</button>`;
     }
 
     let crInfo='';
@@ -2042,6 +2119,35 @@ const StaffApp = (function(){
       crInfo=`<div class="cr-info">🔄 変更希望：<br>${lines.join('<br>')}${reasonLine}</div>`;
     }
 
+    // ★ 変更履歴（受理済み）の一覧を週上部に表示
+    let histInfo='';
+    if(w && w.changeHistory && Object.keys(w.changeHistory).length>0){
+      const hDates=Object.keys(w.changeHistory).sort();
+      let hCount=0;
+      const hLines=[];
+      hDates.forEach(ds=>{
+        const arr=w.changeHistory[ds]||[];
+        const d=new Date(ds+'T12:00:00');
+        const dLabel=`${d.getMonth()+1}/${d.getDate()}(${dows[(d.getDay()+6)%7]})`;
+        arr.forEach(h=>{
+          hCount++;
+          const bef = h.before ? fmtShift(h.before.start,h.before.end) : 'お休み';
+          const aft = h.after  ? fmtShift(h.after.start,h.after.end)  : 'お休み';
+          const at  = h.at ? new Date(h.at) : null;
+          const atLabel = at ? `${at.getMonth()+1}/${at.getDate()} ${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}` : '';
+          const rsn = h.reason ? ` <span style="color:#C71585">（${esc(h.reason)}）</span>` : '';
+          const cm  = (h.clearedMedia&&h.clearedMedia.length)
+            ? `<br><span style="font-size:10.5px;color:#E65100">　└ 入力し直しが必要：${esc(h.clearedMedia.join('・'))}</span>`
+            : '';
+          hLines.push(`${dLabel} ${bef} → <b>${aft}</b>${rsn}`
+            + `<br><span style="font-size:10.5px;color:#8A94A0">　└ ${esc(h.by||'')} が ${atLabel} に受理</span>${cm}`);
+        });
+      });
+      histInfo=`<details class="chg-hist"><summary>📜 変更履歴（${hCount}件）</summary>`
+        + `<div class="chg-hist-body">${hLines.join('<hr class="chg-hist-sep">')}</div></details>`;
+    }
+    crInfo = crInfo + histInfo;
+
     let rows='';
     const _today_check=ymd(new Date());
     ds7.forEach((ds,i)=>{
@@ -2056,6 +2162,10 @@ const StaffApp = (function(){
       const kanzen=(w&&w.kanzen&&w.kanzen[ds])||false;
       const vacation=(w&&w.vacations&&w.vacations[ds])||null;
       const vacReq=(w&&w.vacationRequests&&w.vacationRequests.find(r=>r.ds===ds))||null;
+      const dayHist=(w&&w.changeHistory&&w.changeHistory[ds])||null;
+      const histIcon = dayHist && dayHist.length
+        ? `<div class="day-hist-mark" title="変更履歴あり" onclick="event.stopPropagation();StaffApp.showDayHistory('${esc(c.name)}','${wk}','${ds}')">🔄 変更${dayHist.length>1?'×'+dayHist.length:''}</div>`
+        : '';
       const dateCell=`<div class="day-fixed ${isRest?'rest':''} ${vacation?'day-vacation':''}">
         <div class="day-date"><span class="d-md">${md}</span><span class="d-dow ${dcls}">(${dows[i]})</span></div>
         ${vacation
@@ -2066,6 +2176,7 @@ const StaffApp = (function(){
               ? `<div class="shift-big">⏰ ${fmtShift(sh.start,sh.end)}${kanzen?'<span class="kanzen-ico"> 完🔵</span>':''}</div>`
               : '<div class="rest-cell">お休み</div>'
         }
+        ${histIcon}
         ${dayMemo?`<div class="day-memo-line">📝 ${esc(dayMemo)}</div>`:''}
       </div>`;
 
@@ -2138,7 +2249,39 @@ const StaffApp = (function(){
   }
 
   /* ============ 操作 ============ */
+  // ★ チェック可否ガード：まだ確認済み通知を送っていない週（waiting）はチェック不可
+  function _canCheckWeek(cast, wk){
+    const w=Store.getWeek(cast,wk);
+    if(!w) return true;
+    // waiting（提出済み・確認通知前）／change_requested（変更申請・確認通知前）はチェック前に確認通知が必要
+    if(w.status==='waiting' || w.status==='change_requested'){
+      _showCheckLockWarning();
+      return false;
+    }
+    return true;
+  }
+  function _showCheckLockWarning(){
+    const existing=document.getElementById('checkLockModal');
+    if(existing) return;
+    const modal=document.createElement('div');
+    modal.id='checkLockModal';
+    modal.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.45);';
+    modal.innerHTML=`
+      <div style="background:#fff;border-radius:20px;padding:26px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+        <div style="font-size:38px;margin-bottom:10px">📤</div>
+        <div style="font-size:17px;font-weight:900;color:var(--text);margin-bottom:10px">先に確認済み通知を送ってください</div>
+        <div style="font-size:13.5px;color:var(--text2);line-height:1.7;margin-bottom:20px">
+          このシフトはまだキャストへの確認通知を送っていません。<br><b>「📤 確認済み通知送信」ボタンを押してから</b>、入力チェックができます。
+        </div>
+        <button id="checkLockClose" style="width:100%;padding:14px;border:none;border-radius:13px;background:linear-gradient(135deg,#8FD9C0,#3FA88A);color:#fff;font-size:15px;font-weight:900;cursor:pointer">わかりました</button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#checkLockClose').addEventListener('click',()=>modal.remove());
+    modal.addEventListener('click',(e)=>{ if(e.target===modal) modal.remove(); });
+  }
+
   async function toggleCheck(cast, wk, ds, media){
+    if(!_canCheckWeek(cast, wk)) return;
     const w=Store.getWeek(cast,wk);
     const cur = w && w.checks[ds+'_'+media] && w.checks[ds+'_'+media].checked;
     const r=Store.dispatch('SET_CHECK',{cast,wk,ds,media,checked:!cur,by:staffName,color:staffColor(staffName)});
@@ -2150,6 +2293,7 @@ const StaffApp = (function(){
   const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'];
 
   async function toggleDayAll(cast, wk, ds){
+    if(!_canCheckWeek(cast, wk)) return;
     const w=Store.getWeek(cast,wk);
     if(!w || !w.shifts[ds]) return;
     const dayStores=STORE_ORDER.filter(m=>Store.getCastStores(cast).includes(m));
@@ -2175,6 +2319,7 @@ const StaffApp = (function(){
   }
 
   async function fillRemaining(cast, wk){
+    if(!_canCheckWeek(cast, wk)) return;
     const w=Store.getWeek(cast,wk);
     if(!w) return;
     const stores=Store.getCastStores(cast);
@@ -2197,8 +2342,8 @@ const StaffApp = (function(){
   /* 一括確定（waitingのみ・change_requestedは対象外） */
   async function bulkConfirmAll(){
     const items=collectInbox().filter(it=>it.type==='submit');
-    if(items.length===0){ toast('確定できる提出がありません'); return; }
-    if(!confirm(`受信ボックスの提出済み ${items.length}件 を一括確定します。\n変更申請・長期休暇申請は対象外です。\nよろしいですか？`)) return;
+    if(items.length===0){ toast('確認通知を送れる提出がありません'); return; }
+    if(!confirm(`受信ボックスの提出済み ${items.length}件 に一括でキャストへ確認通知を送信します。\n変更申請・長期休暇申請は対象外です。\nよろしいですか？`)) return;
     let done=0;
     items.forEach(it=>{
       const r=Store.dispatch('CONFIRM_WEEK',{cast:it.cast,wk:it.wk,by:staffName});
@@ -2210,27 +2355,19 @@ const StaffApp = (function(){
     items.forEach(it=>{
       StaffGas.notify(it.cast,'done','シフトが確定しました（'+_wkShortRange(it.wk)+'）');
     });
-    toast(`${done}件を一括確定しました✅`);
+    toast(`${done}件のキャストへ確認通知を送信しました📤`);
   }
 
+  // ★ 提出を受けてキャストへ確認通知を送る（週はロックされる）
+  //   変更申請は acceptChange 側で完結するため、ここは通常フロー専用
   async function confirmWeek(cast, wk){
-    // 確定前のステータスで「変更後の確定」かを判定
-    const wBefore = Store.getWeek(cast, wk);
-    const wasChange = wBefore && (wBefore.status==='change_inputting' || wBefore.status==='change_requested');
     const r=Store.dispatch('CONFIRM_WEEK',{cast,wk,by:staffName});
     if(r.error){ toast(errorMessage(r.error)); return; }
     renderAll();
     await saveNow();
-    // 週の範囲ラベル（6/1〜6/7形式）
     const wkRange = _wkShortRange(wk);
-    // ★ 文言を分ける：変更後の確定か通常の確定か
-    if(wasChange){
-      StaffGas.notify(cast,'change_done','変更申請が受理されました（'+wkRange+'）');
-      toast(cast+'さんの'+weekLabel(wk)+'を更新・確定しました✅');
-    } else {
-      StaffGas.notify(cast,'done','シフトが確定しました（'+wkRange+'）');
-      toast(cast+'さんの'+weekLabel(wk)+'を確定しました✅');
-    }
+    StaffGas.notify(cast,'done','シフトが確定しました（'+wkRange+'）');
+    toast(cast+'さんへ確認通知を送信しました📤');
   }
 
   /* 週キー → "6/1〜6/7" 短縮範囲 */
@@ -2240,24 +2377,67 @@ const StaffApp = (function(){
     return f(ds[0])+'〜'+f(ds[6]);
   }
 
+  // ★ 日付セルの🔄マークから、その日の変更履歴を表示
+  function showDayHistory(cast, wk, ds){
+    const w=Store.getWeek(cast,wk);
+    const arr=(w&&w.changeHistory&&w.changeHistory[ds])||[];
+    if(!arr.length){ toast('変更履歴がありません'); return; }
+    const d=new Date(ds+'T12:00:00');
+    const dows=['月','火','水','木','金','土','日'];
+    const dLabel=`${d.getMonth()+1}/${d.getDate()}(${dows[(d.getDay()+6)%7]})`;
+    const body=arr.map((h,i)=>{
+      const bef=h.before?fmtShift(h.before.start,h.before.end):'お休み';
+      const aft=h.after?fmtShift(h.after.start,h.after.end):'お休み';
+      const at=h.at?new Date(h.at):null;
+      const atLabel=at?`${at.getFullYear()}/${at.getMonth()+1}/${at.getDate()} ${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`:'不明';
+      const cm=(h.clearedMedia&&h.clearedMedia.length)
+        ? `<div style="margin-top:7px;padding:7px 9px;background:#FFF3E0;border-radius:8px;font-size:11.5px;color:#E65100;font-weight:700;line-height:1.6">
+             ⚠️ 入力し直しが必要になった媒体（${h.clearedMedia.length}件）<br>${esc(h.clearedMedia.join('・'))}</div>`
+        : `<div style="margin-top:7px;font-size:11.5px;color:#9CAAB5">解除されたチェックはありません</div>`;
+      return `<div style="padding:12px 0;${i>0?'border-top:1.5px solid #EEF3F7':''}">
+        <div style="font-size:11px;font-weight:800;color:#9CAAB5;margin-bottom:5px">${i+1}回目 ・ ${esc(h.by||'不明')} が ${atLabel} に受理</div>
+        <div style="font-size:15px;font-weight:900;color:var(--text)">
+          <span style="color:#9CAAB5;text-decoration:line-through">${bef}</span>
+          <span style="margin:0 7px">→</span>
+          <span style="color:#C71585">${aft}</span>
+        </div>
+        ${h.reason?`<div style="margin-top:5px;font-size:12px;color:#C71585;font-weight:700">📝 理由：${esc(h.reason)}</div>`:''}
+        ${cm}
+      </div>`;
+    }).join('');
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.45);';
+    modal.innerHTML=`
+      <div style="background:#fff;border-radius:20px;padding:22px;max-width:420px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+        <div style="font-size:17px;font-weight:900;color:var(--text);margin-bottom:3px">🔄 ${esc(cast)}さん ${dLabel} の変更履歴</div>
+        <div style="font-size:12px;color:#9CAAB5;margin-bottom:8px">全${arr.length}件（新しい変更ほど下）</div>
+        ${body}
+        <button id="dayHistClose" style="width:100%;margin-top:16px;padding:13px;border:none;border-radius:13px;background:linear-gradient(135deg,#8FD9C0,#3FA88A);color:#fff;font-size:15px;font-weight:900;cursor:pointer">閉じる</button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#dayHistClose').addEventListener('click',()=>modal.remove());
+    modal.addEventListener('click',e=>{ if(e.target===modal) modal.remove(); });
+  }
+
   async function acceptChange(cast, wk){
-    const r=Store.dispatch('ACCEPT_CHANGE',{cast,wk});
+    if(!confirm(cast+'さんの'+weekLabel(wk)+'の変更申請を受理しますか？\n（申請内容がシフトに反映され、変更確定になります）'))return;
+    const r=Store.dispatch('ACCEPT_CHANGE',{cast,wk,by:staffName});
     if(r.error){ toast(errorMessage(r.error)); return; }
     renderAll();
     await saveNow();
-    // ★ 変更受理通知（新規追加）
-    StaffGas.notify(cast,'change','変更申請を確認中です');
-    toast('受理しました。内容を修正して「変更を反映して確定」を押してください');
+    // ★ 受理通知（アプリ内＋メール）
+    StaffGas.notify(cast,'change_done','変更申請が受理されました（'+_wkShortRange(wk)+'）');
+    toast(cast+'さんの'+weekLabel(wk)+'の変更を受理しました✅');
   }
 
   async function rejectChange(cast, wk){
-    if(!confirm(cast+'さんの'+weekLabel(wk)+'の変更リクエストを却下しますか？\n（元のシフトのまま確定に戻ります）'))return;
+    if(!confirm(cast+'さんの'+weekLabel(wk)+'の変更申請を却下しますか？\n（元のシフトのまま確定に戻ります）'))return;
     const r=Store.dispatch('REJECT_CHANGE',{cast,wk});
     if(r.error){ toast(errorMessage(r.error)); return; }
     renderAll();
     await saveNow();
-    // ★ 却下通知（既存）
-    StaffGas.notify(cast,'reject','変更申請が否認されました');
+    // ★ 却下通知（アプリ内＋メール）
+    StaffGas.notify(cast,'reject','変更申請が却下されました（'+_wkShortRange(wk)+'）');
     toast('却下しました（元のシフトのまま）');
   }
 
@@ -2977,7 +3157,7 @@ const StaffApp = (function(){
   return {
     init, setStaffName, jumpToCast, toggleCast, openLogs,
     toggleCheck, toggleDayAll, fillRemaining,
-    confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks,
+    confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, showDayHistory,
     acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,

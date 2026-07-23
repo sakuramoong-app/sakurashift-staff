@@ -915,7 +915,7 @@ const Store = (function(){
     w = w || _ensureWeek(cast, wk);
     const stores = getCastStores(cast);
     if(stores.length===0) return false; // 店舗未設定はチェック不能→確定にしない
-    const dates = weekDatesInternal(wk);
+    const dates = weekDates(wk);
     let hasAnyShift=false;
     for(const ds of dates){
       const sh = w.shifts && w.shifts[ds];

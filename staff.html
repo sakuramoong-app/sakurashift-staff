@@ -911,9 +911,12 @@ const Store = (function(){
   }
 
   // その週が「全出勤日×全所属店舗」チェック済みか判定
+  // ★ 判定対象は「画面にチェック欄が描画される媒体（STORES）」に限定する。
+  //   castStoresに画面へ出ない媒体（例：v1時代の「ヘブン」＝現在はヘブンラナ/ヘブンサクラに分割）
+  //   が残っていると、チェックしようがないため永久に確定できなくなるため。
   function _isWeekFullyChecked(cast, wk, w){
     w = w || _ensureWeek(cast, wk);
-    const stores = getCastStores(cast);
+    const stores = getCastStores(cast).filter(m => STORES.includes(m));
     if(stores.length===0) return false; // 店舗未設定はチェック不能→確定にしない
     const dates = weekDates(wk);
     let hasAnyShift=false;
@@ -2326,7 +2329,7 @@ const StaffApp = (function(){
     if(!_canCheckWeek(cast, wk)) return;
     const w=Store.getWeek(cast,wk);
     if(!w) return;
-    const stores=Store.getCastStores(cast);
+    const stores=Store.getCastStores(cast).filter(m=>STORES.includes(m));
     let count=0;
     weekDates(wk).forEach(ds=>{
       if(!w.shifts[ds]) return;

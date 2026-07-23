@@ -784,6 +784,15 @@ function esc(s){
 
 function nowIso(){ return new Date().toISOString(); }
 
+/* ★ 「出勤→お休み」に変更された日にチェック対象となる媒体
+   お休みの反映作業が発生するのはこの12媒体のみ。
+   ぴゅあらば・情報局系（(キュ)ぴゅあらば/(キュ)情報局/(極)ぴゅあらば/(極)情報局）は
+   お休み反映の作業が無いため、表示はグレーアウトし確定判定からも除外する。 */
+const REST_DAY_STORES = [
+  '記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン',
+  '逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ'
+];
+
 /* ★ その日が「変更申請で出勤→お休みになった日」か判定
    受理時に changeHistory へ before=シフトあり / after=null が記録される。
    この日は媒体側で「お休みに変更」の入力作業が発生するため、
@@ -963,7 +972,9 @@ const Store = (function(){
       // 出勤日、または「出勤→お休みに変更された日」が対象
       if((!sh || sh.start==null) && !toRest) continue;
       hasAnyShift=true;
-      for(const m of stores){
+      // ★ お休み変更日は REST_DAY_STORES に限定（グレーアウトした媒体は判定対象外）
+      const target = toRest ? stores.filter(m=>REST_DAY_STORES.includes(m)) : stores;
+      for(const m of target){
         const ck = w.checks && w.checks[ds+'_'+m];
         if(!ck || !ck.checked) return false; // 1つでも未チェックなら未完了
       }
@@ -1850,7 +1861,8 @@ const StaffApp = (function(){
         if(ds<today) continue;
         const sh=w.shifts&&w.shifts[ds];
         if((!sh||sh.start==null) && !isChangedToRest(w, ds)) continue;
-        const allChecked=dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+        const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
+        const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
         if(!allChecked){
           const row=castEl.querySelector(`.check-row[data-ds="${ds}"]`);
           if(row){ row.classList.add('row-spin'); setTimeout(()=>row.classList.remove('row-spin'),2400); }
@@ -1882,7 +1894,8 @@ const StaffApp = (function(){
       if(!['waiting','input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       const sh=w.shifts&&w.shifts[ds];
       if((!sh||sh.start==null) && !isChangedToRest(w, ds)) continue;
-      const allChecked=dayStores.length>0&&dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+      const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
+      const allChecked=_dsStores.length>0&&_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked){ targetDs=ds; break; }
     }
 
@@ -1947,7 +1960,8 @@ const StaffApp = (function(){
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(castName,wk);
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
-      const allChecked=dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+      const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
+      const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked) return true;
     }
     return false;
@@ -2261,7 +2275,7 @@ const StaffApp = (function(){
 
       let bulkCell='';
       if(showChecks){
-        const dayStores=allStores.filter(m=>castStores.includes(m));
+        const dayStores=allStores.filter(m=>castStores.includes(m) && (!toRest || REST_DAY_STORES.includes(m)));
         const allChecked=dayStores.length>0 && dayStores.every(m=>w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
         bulkCell=`<div class="bulk-cell"><span class="chk bulk ${allChecked?'checked':''}" style="${allChecked?'background:'+(staffColor(staffName)||'#5FD0A0'):''}"
           title="この日を一括" onclick="StaffApp.toggleDayAll('${esc(c.name)}','${wk}','${ds}')">${allChecked?'✓':''}</span></div>`;
@@ -2275,6 +2289,8 @@ const StaffApp = (function(){
       }else{
         const makeChip=(m)=>{
           if(!castStores.includes(m)) return `<div class="store-chip-cell off"><div class="store-chip-name">${esc(STORE_SHORT[m]||m)}</div></div>`;
+          // ★ お休みに変更された日は、お休み反映のない媒体をグレーアウト（判定対象からも除外済み）
+          if(toRest && !REST_DAY_STORES.includes(m)) return `<div class="store-chip-cell off"><div class="store-chip-name">${esc(STORE_SHORT[m]||m)}</div></div>`;
           const ck=w.checks[ds+'_'+m];
           const checked=ck&&ck.checked;
           const color=checked?(staffColor(ck.by)||'#5FD0A0'):'';
@@ -2375,7 +2391,8 @@ const StaffApp = (function(){
     if(!_canCheckWeek(cast, wk)) return;
     const w=Store.getWeek(cast,wk);
     if(!w || (!w.shifts[ds] && !isChangedToRest(w, ds))) return;
-    const dayStores=STORE_ORDER.filter(m=>Store.getCastStores(cast).includes(m));
+    const _toRest = isChangedToRest(w, ds);
+    const dayStores=STORE_ORDER.filter(m=>Store.getCastStores(cast).includes(m) && (!_toRest || REST_DAY_STORES.includes(m)));
     if(dayStores.length===0) return;
     // 「残り一括」：未チェックの店舗だけを自分のチェックにする（他人のチェックは触らない）
     const unchecked=dayStores.filter(m=>{ const ck=w.checks[ds+'_'+m]; return !ck || !ck.checked; });
@@ -2404,8 +2421,10 @@ const StaffApp = (function(){
     const stores=Store.getCastStores(cast).filter(m=>STORES.includes(m));
     let count=0;
     weekDates(wk).forEach(ds=>{
-      if(!w.shifts[ds] && !isChangedToRest(w, ds)) return;
-      stores.forEach(m=>{
+      const _toRest = isChangedToRest(w, ds);
+      if(!w.shifts[ds] && !_toRest) return;
+      const target = _toRest ? stores.filter(m=>REST_DAY_STORES.includes(m)) : stores;
+      target.forEach(m=>{
         const ck=w.checks[ds+'_'+m];
         if(!ck || !ck.checked){
           Store.dispatch('SET_CHECK',{cast,wk,ds,media:m,checked:true,by:staffName,color:staffColor(staffName)});

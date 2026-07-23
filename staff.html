@@ -137,6 +137,10 @@
   .check-rows{display:flex;flex-direction:column;gap:3px;}
   .check-row{display:flex;gap:0;background:#fff;border-radius:10px;border:1.5px solid #CFE5DA;overflow:hidden;}
   .check-row.row-rest{background:#FAFBFC;opacity:.85;}
+  /* 出勤→お休みに変更された日：媒体側の入力作業が必要なので目立たせる */
+  .check-row.row-to-rest{background:#FFFAF3;border-color:#FFCC80;}
+  .check-row.row-to-rest .day-fixed{background:#FFF3E0;border-right-color:#FFCC80;}
+  .check-row.row-to-rest .store-area{background:#FFFDF8;}
   .day-fixed{flex-shrink:0;width:88px;padding:3px 7px;background:#EAF7F0;border-right:2px solid #C4E2D3;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:0;}
   .day-fixed.rest{background:#F2F4F6;}
   .day-date{display:flex;align-items:baseline;gap:4px;justify-content:center;}
@@ -780,6 +784,21 @@ function esc(s){
 
 function nowIso(){ return new Date().toISOString(); }
 
+/* ★ その日が「変更申請で出勤→お休みになった日」か判定
+   受理時に changeHistory へ before=シフトあり / after=null が記録される。
+   この日は媒体側で「お休みに変更」の入力作業が発生するため、
+   シフトが無くてもチェック欄を表示し、確定判定の対象にする。 */
+function isChangedToRest(w, ds){
+  if(!w || !w.changeHistory) return false;
+  const arr = w.changeHistory[ds];
+  if(!arr || !arr.length) return false;
+  const last = arr[arr.length-1];
+  // 最新の変更が「お休み化」で、かつ現在もシフトが無い場合のみ
+  if(last.after) return false;
+  const sh = w.shifts && w.shifts[ds];
+  return !sh || sh.start==null;
+}
+
 function kanaGroupOf(name){
   const first = (name||'')[0];
   for(const g of KANA_GROUPS){ if(g.chars.includes(first)) return g.label; }
@@ -940,7 +959,9 @@ const Store = (function(){
     let hasAnyShift=false;
     for(const ds of dates){
       const sh = w.shifts && w.shifts[ds];
-      if(!sh || sh.start==null) continue; // 出勤日のみ対象
+      const toRest = isChangedToRest(w, ds);
+      // 出勤日、または「出勤→お休みに変更された日」が対象
+      if((!sh || sh.start==null) && !toRest) continue;
       hasAnyShift=true;
       for(const m of stores){
         const ck = w.checks && w.checks[ds+'_'+m];
@@ -1828,7 +1849,7 @@ const StaffApp = (function(){
       for(const ds of weekDates(wk)){
         if(ds<today) continue;
         const sh=w.shifts&&w.shifts[ds];
-        if(!sh||sh.start==null) continue;
+        if((!sh||sh.start==null) && !isChangedToRest(w, ds)) continue;
         const allChecked=dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
         if(!allChecked){
           const row=castEl.querySelector(`.check-row[data-ds="${ds}"]`);
@@ -1860,7 +1881,7 @@ const StaffApp = (function(){
       if(!w) continue;
       if(!['waiting','input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       const sh=w.shifts&&w.shifts[ds];
-      if(!sh||sh.start==null) continue;
+      if((!sh||sh.start==null) && !isChangedToRest(w, ds)) continue;
       const allChecked=dayStores.length>0&&dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked){ targetDs=ds; break; }
     }
@@ -1925,7 +1946,7 @@ const StaffApp = (function(){
       if(ds < todayStr) continue;
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(castName,wk);
-      if(!w||!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) continue;
+      if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
       const allChecked=dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked) return true;
     }
@@ -2207,6 +2228,10 @@ const StaffApp = (function(){
       const isPast=ds<_today_check;
       const sh=w&&w.shifts[ds];
       const isRest=!sh;
+      // ★ 出勤→お休みに変更された日は、シフトが無くてもチェック欄を出す
+      //   （媒体側で「お休みに変更」の入力作業が発生するため）
+      const toRest=isChangedToRest(w, ds);
+      const showChecks=!isRest||toRest;
       const d=new Date(ds+'T12:00:00');
       const md=`${d.getMonth()+1}/${d.getDate()}`;
       const holiday=isJpHoliday(ds);
@@ -2235,7 +2260,7 @@ const StaffApp = (function(){
       </div>`;
 
       let bulkCell='';
-      if(!isRest){
+      if(showChecks){
         const dayStores=allStores.filter(m=>castStores.includes(m));
         const allChecked=dayStores.length>0 && dayStores.every(m=>w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
         bulkCell=`<div class="bulk-cell"><span class="chk bulk ${allChecked?'checked':''}" style="${allChecked?'background:'+(staffColor(staffName)||'#5FD0A0'):''}"
@@ -2245,7 +2270,7 @@ const StaffApp = (function(){
       }
 
       let storeCells='';
-      if(isRest){
+      if(!showChecks){
         storeCells=`<div class="store-rest">— お休み —</div>`;
       }else{
         const makeChip=(m)=>{
@@ -2266,7 +2291,7 @@ const StaffApp = (function(){
         storeCells=`<div class="store-grid2"><div class="store-row">${row1}</div><div class="store-row">${row2}</div></div>`;
       }
 
-      rows+=`<div class="check-row ${isRest?'row-rest':''} ${isRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''}" data-ds="${ds}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
+      rows+=`<div class="check-row ${isRest&&!toRest?'row-rest':''} ${toRest?'row-to-rest':''} ${isRest&&!toRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''}" data-ds="${ds}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
     });
 
     const isCurrentWeek = wk===currentWeekKey();
@@ -2349,7 +2374,7 @@ const StaffApp = (function(){
   async function toggleDayAll(cast, wk, ds){
     if(!_canCheckWeek(cast, wk)) return;
     const w=Store.getWeek(cast,wk);
-    if(!w || !w.shifts[ds]) return;
+    if(!w || (!w.shifts[ds] && !isChangedToRest(w, ds))) return;
     const dayStores=STORE_ORDER.filter(m=>Store.getCastStores(cast).includes(m));
     if(dayStores.length===0) return;
     // 「残り一括」：未チェックの店舗だけを自分のチェックにする（他人のチェックは触らない）
@@ -2379,7 +2404,7 @@ const StaffApp = (function(){
     const stores=Store.getCastStores(cast).filter(m=>STORES.includes(m));
     let count=0;
     weekDates(wk).forEach(ds=>{
-      if(!w.shifts[ds]) return;
+      if(!w.shifts[ds] && !isChangedToRest(w, ds)) return;
       stores.forEach(m=>{
         const ck=w.checks[ds+'_'+m];
         if(!ck || !ck.checked){

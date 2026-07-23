@@ -111,13 +111,29 @@
   /* 変更履歴 */
   .day-hist-mark{font-size:9.5px;font-weight:800;color:#7B1FA2;background:#F3E5F5;border:1px solid #E1BEE7;border-radius:5px;padding:1px 5px;line-height:1.4;text-align:center;margin-top:2px;cursor:pointer;white-space:nowrap;}
   .day-hist-mark:hover{background:#E1BEE7;}
+  .day-hist-mark.to-rest{color:#E65100;background:#FFF3E0;border-color:#FFCC80;}
+  .day-hist-mark.to-rest:hover{background:#FFE0B2;}
   .chg-hist{background:#F8F4FC;border:1.5px solid #E1D3EE;border-radius:11px;margin-bottom:10px;overflow:hidden;}
   .chg-hist>summary{padding:9px 13px;font-size:12.5px;font-weight:800;color:#7B1FA2;cursor:pointer;list-style:none;user-select:none;}
   .chg-hist>summary::-webkit-details-marker{display:none;}
   .chg-hist>summary::before{content:'▸ ';}
   .chg-hist[open]>summary::before{content:'▾ ';}
-  .chg-hist-body{padding:2px 13px 11px;font-size:12px;font-weight:700;color:#4A5560;line-height:1.75;}
-  .chg-hist-sep{border:none;border-top:1.5px dashed #E1D3EE;margin:8px 0;}
+  .chg-hist-body{padding:4px 13px 11px;font-size:12.5px;font-weight:700;color:#4A5560;line-height:1.6;}
+  .chg-day{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px dashed #EAE0F2;flex-wrap:wrap;}
+  .chg-day:last-of-type{border-bottom:none;}
+  .chg-day-date{min-width:74px;font-weight:800;color:var(--text);}
+  .chg-day-date.day-sat{color:#5B9BD5;}
+  .chg-day-date.day-sun{color:var(--pink-deep);}
+  .chg-day-plain{color:#A8B2BC;font-weight:700;}
+  .chg-day-mod{background:#FCF7FF;border-radius:7px;padding:5px 7px;margin:2px -7px;border-bottom:none;}
+  .chg-day-bef{color:#9CAAB5;text-decoration:line-through;}
+  .chg-day-arrow{color:#B39DDB;font-weight:900;}
+  .chg-day-aft{color:#7B1FA2;font-weight:900;}
+  .chg-day-aft.is-rest{color:#E65100;}
+  .chg-rest-chk{font-size:10.5px;font-weight:800;color:#E65100;background:#FFF3E0;border:1px solid #FFCC80;border-radius:5px;padding:1px 6px;}
+  .chg-day-reason{font-size:11.5px;color:#C71585;font-weight:700;}
+  .chg-day-times{font-size:10.5px;font-weight:800;color:#fff;background:#B39DDB;border-radius:99px;padding:1px 7px;}
+  .chg-foot{margin-top:9px;padding-top:8px;border-top:1.5px solid #E1D3EE;font-size:11.5px;color:#8A94A0;font-weight:700;}
   .check-rows{display:flex;flex-direction:column;gap:3px;}
   .check-row{display:flex;gap:0;background:#fff;border-radius:10px;border:1.5px solid #CFE5DA;overflow:hidden;}
   .check-row.row-rest{background:#FAFBFC;opacity:.85;}
@@ -580,6 +596,7 @@ const AVC = ['av-0','av-1','av-2','av-3','av-4'];
 const STATUS = {
   unsubmitted:      { label:'未提出',     badge:'badge-gray',   locked:false, inbox:false, editable:true  },
   waiting:          { label:'提出済み',   badge:'badge-warning',locked:false, inbox:true,  editable:true  }, // キャスト編集可能
+  input_waiting:    { label:'入力待ち',   badge:'badge-warning',locked:true,  inbox:false, editable:false }, // 確認通知済み・チェック0件
   inputting:        { label:'内勤入力中', badge:'badge-info',   locked:true,  inbox:false, editable:false }, // 内勤が触ったらロック
   confirmed:        { label:'確定',       badge:'badge-success',locked:true,  inbox:false, editable:false },
   change_requested: { label:'変更申請中', badge:'badge-pink',   locked:true,  inbox:true,  editable:false },
@@ -590,8 +607,9 @@ const STATUS = {
 /* ---------- ステータス遷移ルール ---------- */
 const TRANSITIONS = {
   unsubmitted:      ['waiting'],
-  waiting:          ['inputting','confirmed','unsubmitted'], // キャストが取り下げ可能
-  inputting:        ['confirmed','waiting'],
+  waiting:          ['input_waiting','inputting','confirmed','unsubmitted'], // キャストが取り下げ可能
+  input_waiting:    ['inputting','confirmed'],
+  inputting:        ['input_waiting','confirmed','waiting'],
   confirmed:        ['change_requested'],
   change_requested: ['change_confirmed','change_inputting','confirmed'],
   change_inputting: ['change_confirmed','confirmed'],
@@ -1183,8 +1201,12 @@ const Store = (function(){
         //   全媒体・全出勤日がチェック済み → confirmed（確定）
         //   未チェックが残る → inputting（内勤入力中）
         //   ※waiting/change_requested（確認通知前）はUIでチェック自体をブロックしているのでここには来ない
-        if(w.status==='inputting' || w.status==='confirmed'){
-          w.status = _isWeekFullyChecked(p.cast, p.wk, w) ? 'confirmed' : 'inputting';
+        // ★ 通常フロー：チェック0件＝入力待ち／1件以上＝内勤入力中／全部＝確定
+        //   （input_waiting は「確認通知は送ったがまだ1つも入力チェックしていない」状態）
+        if(w.status==='input_waiting' || w.status==='inputting' || w.status==='confirmed'){
+          if(_isWeekFullyChecked(p.cast, p.wk, w))      w.status = 'confirmed';
+          else if(Object.keys(w.checks||{}).length > 0) w.status = 'inputting';
+          else                                          w.status = 'input_waiting';
         } else if(w.status==='change_inputting' || w.status==='change_confirmed'){
           w.status = _isWeekFullyChecked(p.cast, p.wk, w) ? 'change_confirmed' : 'change_inputting';
         }
@@ -1200,7 +1222,11 @@ const Store = (function(){
           w.status = 'change_confirmed';
         } else {
           if(!canTransition(w.status,'confirmed')) return {error:'BAD_TRANSITION'};
-          w.status = 'confirmed';
+          // ★ 確認通知を送った時点のチェック状況で判定
+          //   通常は0件なので input_waiting（入力待ち・黄色）になる
+          if(_isWeekFullyChecked(p.cast, p.wk, w))      w.status = 'confirmed';
+          else if(Object.keys(w.checks||{}).length > 0) w.status = 'inputting';
+          else                                          w.status = 'input_waiting';
         }
         w.confirmedBy = p.by || state.currentStaffName || '';
         _touch(p.cast, p.wk, p.by || state.currentStaffName);
@@ -1798,7 +1824,7 @@ const StaffApp = (function(){
     for(const wk of weeksInMonth(viewYM)){
       const w=Store.getWeek(name,wk);
       if(!w) continue;
-      if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
+      if(!['waiting','input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       for(const ds of weekDates(wk)){
         if(ds<today) continue;
         const sh=w.shifts&&w.shifts[ds];
@@ -1832,7 +1858,7 @@ const StaffApp = (function(){
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(name,wk);
       if(!w) continue;
-      if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
+      if(!['waiting','input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       const sh=w.shifts&&w.shifts[ds];
       if(!sh||sh.start==null) continue;
       const allChecked=dayStores.length>0&&dayStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
@@ -1917,7 +1943,7 @@ const StaffApp = (function(){
         if(f==='today'){
           return _hasUncheckedToday(c.name);
         }
-        if(f==='waiting') return w.status==='waiting'||w.status==='inputting';
+        if(f==='waiting') return ['waiting','input_waiting','inputting'].includes(w.status);
         if(f==='change') return w.status==='change_requested';
         return false;
       });
@@ -1941,7 +1967,7 @@ const StaffApp = (function(){
           if(filter==='today'){
             return _hasUncheckedToday(c.name);
           }
-          if(filter==='waiting') return w.status==='waiting'||w.status==='inputting';
+          if(filter==='waiting') return ['waiting','input_waiting','inputting'].includes(w.status);
           if(filter==='change') return w.status==='change_requested';
           return false;
         });
@@ -2051,7 +2077,7 @@ const StaffApp = (function(){
     for(const wk of weeks){
       const w=Store.getWeek(name,wk);
       if(!w) continue;
-      if(!['waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
+      if(!['waiting','input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) continue;
       for(const ds of weekDates(wk)){
         if(ds>=today&&w.shifts[ds]){targetDs=ds;targetWk=wk;break;}
       }
@@ -2126,32 +2152,52 @@ const StaffApp = (function(){
       crInfo=`<div class="cr-info">🔄 変更希望：<br>${lines.join('<br>')}${reasonLine}</div>`;
     }
 
-    // ★ 変更履歴（受理済み）の一覧を週上部に表示
+    // ★ 変更履歴（受理済み）：その週の全7日を並べて表示
+    //   変更のあった日は「変更前 → 変更後（理由）」、無い日は現在のシフトのみ
     let histInfo='';
     if(w && w.changeHistory && Object.keys(w.changeHistory).length>0){
-      const hDates=Object.keys(w.changeHistory).sort();
       let hCount=0;
-      const hLines=[];
-      hDates.forEach(ds=>{
-        const arr=w.changeHistory[ds]||[];
+      const acceptedBy=new Set();
+      let lastAt=null;
+      const hLines=ds7.map((ds,i)=>{
         const d=new Date(ds+'T12:00:00');
-        const dLabel=`${d.getMonth()+1}/${d.getDate()}(${dows[(d.getDay()+6)%7]})`;
-        arr.forEach(h=>{
-          hCount++;
-          const bef = h.before ? fmtShift(h.before.start,h.before.end) : 'お休み';
-          const aft = h.after  ? fmtShift(h.after.start,h.after.end)  : 'お休み';
-          const at  = h.at ? new Date(h.at) : null;
-          const atLabel = at ? `${at.getMonth()+1}/${at.getDate()} ${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}` : '';
-          const rsn = h.reason ? ` <span style="color:#C71585">（${esc(h.reason)}）</span>` : '';
-          const cm  = (h.clearedMedia&&h.clearedMedia.length)
-            ? `<br><span style="font-size:10.5px;color:#E65100">　└ 入力し直しが必要：${esc(h.clearedMedia.join('・'))}</span>`
-            : '';
-          hLines.push(`${dLabel} ${bef} → <b>${aft}</b>${rsn}`
-            + `<br><span style="font-size:10.5px;color:#8A94A0">　└ ${esc(h.by||'')} が ${atLabel} に受理</span>${cm}`);
-        });
+        const dLabel=`${d.getMonth()+1}/${d.getDate()}(${dows[i]})`;
+        const dcls2=isJpHoliday(ds)?'day-sun':(i===5?'day-sat':i===6?'day-sun':'');
+        const arr=(w.changeHistory[ds])||[];
+        if(arr.length===0){
+          // 変更なしの日：現在のシフトをそのまま表示
+          const sh=w.shifts&&w.shifts[ds];
+          const cur=(sh&&sh.start!=null)?fmtShift(sh.start,sh.end):'お休み';
+          return `<div class="chg-day">
+            <span class="chg-day-date ${dcls2}">${dLabel}</span>
+            <span class="chg-day-plain">${cur}</span>
+          </div>`;
+        }
+        // 変更ありの日：最古のbeforeと最新のafterで「元→今」を表す
+        hCount+=arr.length;
+        const first=arr[0], last=arr[arr.length-1];
+        arr.forEach(h=>{ if(h.by) acceptedBy.add(h.by); if(h.at&&(!lastAt||h.at>lastAt)) lastAt=h.at; });
+        const bef=first.before?fmtShift(first.before.start,first.before.end):'お休み';
+        const isRestNow=!last.after;
+        const aft=isRestNow?'お休み':fmtShift(last.after.start,last.after.end);
+        const reason=last.reason||first.reason||'';
+        const times=arr.length>1?`<span class="chg-day-times">×${arr.length}</span>`:'';
+        return `<div class="chg-day chg-day-mod">
+          <span class="chg-day-date ${dcls2}">${dLabel}</span>
+          <span class="chg-day-bef">${bef}</span>
+          <span class="chg-day-arrow">→</span>
+          <span class="chg-day-aft ${isRestNow?'is-rest':''}">${aft}</span>
+          ${isRestNow?'<span class="chg-rest-chk">☑ 休</span>':''}
+          ${reason?`<span class="chg-day-reason">（${esc(reason)}）</span>`:''}
+          ${times}
+        </div>`;
       });
+      const byLabel=[...acceptedBy].filter(Boolean).join('・');
+      const atD=lastAt?new Date(lastAt):null;
+      const atLabel=atD?`${atD.getMonth()+1}/${atD.getDate()} ${String(atD.getHours()).padStart(2,'0')}:${String(atD.getMinutes()).padStart(2,'0')}`:'';
+      const foot=byLabel?`<div class="chg-foot">${esc(byLabel)} が受理${atLabel?`（最終 ${atLabel}）`:''}</div>`:'';
       histInfo=`<details class="chg-hist"><summary>📜 変更履歴（${hCount}件）</summary>`
-        + `<div class="chg-hist-body">${hLines.join('<hr class="chg-hist-sep">')}</div></details>`;
+        + `<div class="chg-hist-body">${hLines.join('')}${foot}</div></details>`;
     }
     crInfo = crInfo + histInfo;
 
@@ -2170,8 +2216,9 @@ const StaffApp = (function(){
       const vacation=(w&&w.vacations&&w.vacations[ds])||null;
       const vacReq=(w&&w.vacationRequests&&w.vacationRequests.find(r=>r.ds===ds))||null;
       const dayHist=(w&&w.changeHistory&&w.changeHistory[ds])||null;
+      const histToRest = dayHist && dayHist.length && !dayHist[dayHist.length-1].after;
       const histIcon = dayHist && dayHist.length
-        ? `<div class="day-hist-mark" title="変更履歴あり" onclick="event.stopPropagation();StaffApp.showDayHistory('${esc(c.name)}','${wk}','${ds}')">🔄 変更${dayHist.length>1?'×'+dayHist.length:''}</div>`
+        ? `<div class="day-hist-mark${histToRest?' to-rest':''}" title="変更履歴あり" onclick="event.stopPropagation();StaffApp.showDayHistory('${esc(c.name)}','${wk}','${ds}')">${histToRest?'☑ 休に変更':'🔄 変更'}${dayHist.length>1?'×'+dayHist.length:''}</div>`
         : '';
       const dateCell=`<div class="day-fixed ${isRest?'rest':''} ${vacation?'day-vacation':''}">
         <div class="day-date"><span class="d-md">${md}</span><span class="d-dow ${dcls}">(${dows[i]})</span></div>
@@ -2394,22 +2441,19 @@ const StaffApp = (function(){
     const dLabel=`${d.getMonth()+1}/${d.getDate()}(${dows[(d.getDay()+6)%7]})`;
     const body=arr.map((h,i)=>{
       const bef=h.before?fmtShift(h.before.start,h.before.end):'お休み';
-      const aft=h.after?fmtShift(h.after.start,h.after.end):'お休み';
+      const isRest=!h.after;
+      const aft=isRest?'お休み':fmtShift(h.after.start,h.after.end);
       const at=h.at?new Date(h.at):null;
       const atLabel=at?`${at.getFullYear()}/${at.getMonth()+1}/${at.getDate()} ${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`:'不明';
-      const cm=(h.clearedMedia&&h.clearedMedia.length)
-        ? `<div style="margin-top:7px;padding:7px 9px;background:#FFF3E0;border-radius:8px;font-size:11.5px;color:#E65100;font-weight:700;line-height:1.6">
-             ⚠️ 入力し直しが必要になった媒体（${h.clearedMedia.length}件）<br>${esc(h.clearedMedia.join('・'))}</div>`
-        : `<div style="margin-top:7px;font-size:11.5px;color:#9CAAB5">解除されたチェックはありません</div>`;
       return `<div style="padding:12px 0;${i>0?'border-top:1.5px solid #EEF3F7':''}">
         <div style="font-size:11px;font-weight:800;color:#9CAAB5;margin-bottom:5px">${i+1}回目 ・ ${esc(h.by||'不明')} が ${atLabel} に受理</div>
         <div style="font-size:15px;font-weight:900;color:var(--text)">
           <span style="color:#9CAAB5;text-decoration:line-through">${bef}</span>
           <span style="margin:0 7px">→</span>
-          <span style="color:#C71585">${aft}</span>
+          <span style="color:${isRest?'#E65100':'#C71585'}">${aft}</span>
+          ${isRest?'<span style="margin-left:8px;font-size:12px;font-weight:800;color:#E65100;background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:6px;padding:2px 9px">☑ お休みに変更</span>':''}
         </div>
         ${h.reason?`<div style="margin-top:5px;font-size:12px;color:#C71585;font-weight:700">📝 理由：${esc(h.reason)}</div>`:''}
-        ${cm}
       </div>`;
     }).join('');
     const modal=document.createElement('div');

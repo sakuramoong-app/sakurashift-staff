@@ -1967,17 +1967,38 @@ const StaffApp = (function(){
     return false;
   }
 
+  /* ★ そのキャストの「最も早い未チェック日」を返す（無ければ null）
+     本日入力可能フィルターの並び替えに使用。_hasUncheckedToday と同じ判定基準。 */
+  function _firstUncheckedDs(castName){
+    const todayD=new Date(); todayD.setHours(0,0,0,0);
+    const castStores=Store.getCastStores(castName);
+    const dayStores=STORES.filter(m=>castStores.includes(m));
+    if(dayStores.length===0) return null;
+    for(let i=0;i<TODAY_EDITABLE_DAYS;i++){
+      const d=new Date(todayD); d.setDate(todayD.getDate()+i);
+      const ds=ymd(d);
+      const wk=weekKeyOf(ds);
+      const w=Store.getWeek(castName,wk);
+      if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
+      const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
+      const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
+      if(!allChecked) return ds;
+    }
+    return null;
+  }
+
   function countFilter(f){
     const today = ymd(new Date());
     let count = 0;
     Store.getCastList().forEach(c=>{
+      // ★ today は月に関係なく「今日〜28日先」で判定するので、
+      //   表示中の月の週データ有無で絞り込んではいけない
+      //   （8月にしか未入力が無いキャストが7月表示で消える不具合の修正）
+      if(f==='today'){ if(_hasUncheckedToday(c.name)) count++; return; }
       const weeks = weeksInMonth(viewYM);
       const hit = weeks.some(wk=>{
         const w = Store.getWeek(c.name, wk);
         if(!w) return false;
-        if(f==='today'){
-          return _hasUncheckedToday(c.name);
-        }
         if(f==='waiting') return ['waiting','input_waiting','inputting'].includes(w.status);
         if(f==='change') return w.status==='change_requested';
         return false;
@@ -1995,18 +2016,26 @@ const StaffApp = (function(){
     if(searchQuery) list=list.filter(c=>c.name.includes(searchQuery));
     if(filter!=='all'){
       list=list.filter(c=>{
+        // ★ today は月に関係なく判定（表示月の週データ有無で絞り込まない）
+        if(filter==='today') return _hasUncheckedToday(c.name);
         const weeks=weeksInMonth(viewYM);
         return weeks.some(wk=>{
           const w=Store.getWeek(c.name,wk);
           if(!w)return false;
-          if(filter==='today'){
-            return _hasUncheckedToday(c.name);
-          }
           if(filter==='waiting') return ['waiting','input_waiting','inputting'].includes(w.status);
           if(filter==='change') return w.status==='change_requested';
           return false;
         });
       });
+      // ★ 本日入力可能：未入力が最も早い日付の順に並べる（あいうえお順より実用的）
+      if(filter==='today'){
+        list.sort((a,b)=>{
+          const da=_firstUncheckedDs(a.name)||'9999-12-31';
+          const db=_firstUncheckedDs(b.name)||'9999-12-31';
+          if(da!==db) return da.localeCompare(db);
+          return a.name.localeCompare(b.name,'ja');
+        });
+      }
     }
     if(!list.length){ cont.innerHTML='<div class="inbox-empty">該当するキャストがいません</div>'; return; }
     cont.innerHTML='';
@@ -2702,7 +2731,13 @@ const StaffApp = (function(){
     // 本日入力可能：未入力があるキャストへジャンプ
     if(f==='today'){
       const targets = Store.getCastList().filter(c=>_hasUncheckedToday(c.name))
-        .sort((a,b)=>a.name.localeCompare(b.name,'ja'));  // あいうえお順
+        .sort((a,b)=>{
+          // ★ 未入力が最も早い日付の順（同じ日なら名前順）
+          const da=_firstUncheckedDs(a.name)||'9999-12-31';
+          const db=_firstUncheckedDs(b.name)||'9999-12-31';
+          if(da!==db) return da.localeCompare(db);
+          return a.name.localeCompare(b.name,'ja');
+        });
       if(targets.length===0){
         renderCastList();
         toast('本日入力可能なキャストはいません✨');

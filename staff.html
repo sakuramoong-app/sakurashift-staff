@@ -1439,7 +1439,7 @@ const Store = (function(){
 function _auditDetail(a){
   const b=a.before||{}, af=a.after||{};
   switch(a.action){
-    case 'CONFIRM_WEEK': return 'シフトを確定';
+    case 'CONFIRM_WEEK': return a.by==='auto' ? '過去週を自動整理' : 'キャストへ確認通知を送信';
     case 'ACCEPT_CHANGE': return '変更リクエストを受理';
     case 'REJECT_CHANGE': return '変更リクエストを却下';
     case 'DELETE_WEEK': return 'シフトを削除';
@@ -2638,7 +2638,7 @@ const StaffApp = (function(){
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="log-filter-chip active" data-lf="all" style="padding:5px 11px;border-radius:99px;border:2px solid var(--mint);background:var(--mint-deep);color:#fff;font-size:11px;font-weight:800;cursor:pointer">すべて</button>
             <button class="log-filter-chip" data-lf="CAST_SUBMIT" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">シフト提出</button>
-            <button class="log-filter-chip" data-lf="CONFIRM_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">確定</button>
+            <button class="log-filter-chip" data-lf="CONFIRM_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">確認通知</button>
             <button class="log-filter-chip" data-lf="ACCEPT_CHANGE" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">変更受理</button>
             <button class="log-filter-chip" data-lf="DELETE_CAST" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">キャスト削除</button>
           </div>
@@ -2670,10 +2670,10 @@ const StaffApp = (function(){
         const row=document.createElement('div');
         row.style.cssText='padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
         row.innerHTML=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `
-          +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(_auditDetail({action:l.type}))}</span> `
+          +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(_auditDetail({action:l.type, by:l.by}))}</span> `
           +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span>`
           +(l.cast?` → <span style="font-weight:700">${esc(l.cast)}</span>`:'')
-          +(l.detail&&l.detail!==_auditDetail({action:l.type})?`<div style="color:var(--text2);font-size:12px;margin-top:3px;white-space:pre-wrap;line-height:1.5;padding-left:8px">${esc(l.detail)}</div>`:'');
+          +(l.detail&&l.detail!==_auditDetail({action:l.type, by:l.by})?`<div style="color:var(--text2);font-size:12px;margin-top:3px;white-space:pre-wrap;line-height:1.5;padding-left:8px">${esc(l.detail)}</div>`:'');
         body.appendChild(row);
       });
     }

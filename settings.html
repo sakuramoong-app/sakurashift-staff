@@ -737,6 +737,11 @@ const Store = (function(){
       case 'REMOVE_CAST': {
         if(p.role && !can(p.role,'editMaster') && !can(p.role,'editAllShifts')) return {error:'PERMISSION'};
         state.castList = state.castList.filter(c=>c.name!==p.name);
+        // ★ 付随データも一緒に削除（GAS側のdeleteCastと同じ範囲にする）
+        //   ここを消さないと「まとめて保存」でGASが消した分が復活する
+        if(state.castStores)  delete state.castStores[p.name];
+        if(state.castAliases) delete state.castAliases[p.name];
+        if(state.settings && state.settings.castEmails) delete state.settings.castEmails[p.name];
         _masterDirty = true;
         break;
       }
@@ -1213,6 +1218,10 @@ const SettingsApp = (function(){
     try{
       const resp = await MasterGas._post({action:'deleteCast', castName:name});
       if(!resp || !resp.success){ setState('error'); toast('削除に失敗しました'); return; }
+      // ★ 検証用：GAS側で名簿(castList)から消えたかを確認できるようにする
+      if(resp.removedFromList === false){
+        console.warn('[deleteCast] 週データは削除されましたが、名簿からは見つかりませんでした:', name);
+      }
     }catch(e){ setState('error'); toast('通信エラー'); return; }
     const r = Store.dispatch('REMOVE_CAST',{name, role});
     if(r.error){ toast(errorMessage(r.error)); setState('saved'); return; }
@@ -1222,7 +1231,7 @@ const SettingsApp = (function(){
     setState('saved');
     renderCastList();
     markUnsaved();
-    toast(name+'さんを完全に削除しました');
+    toast(name+'さんを完全に削除しました（サーバー反映済み）');
   }
   function updateCastPw(name, pw){
     const r = Store.dispatch('UPDATE_CAST_PW',{name, pw:(pw||'').trim(), role});

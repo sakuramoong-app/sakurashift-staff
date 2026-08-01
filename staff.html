@@ -298,6 +298,8 @@
   .vbar-label{font-size:9px;color:var(--text2);margin-top:4px;white-space:nowrap;font-weight:700;}
   .vbar-col.out .vbar-val{color:#CCC;}
 
+  /* 一部だけ長期休暇の人に付くタグ */
+  .hc-unsub-vac{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:99px;background:#E8F4FF;color:#3B7CB8;font-size:10px;font-weight:800;vertical-align:1px;}
   /* 未提出チップ */
   .hc-unsub-chips{display:flex;flex-wrap:wrap;gap:7px;}
   .hc-unsub-chip{display:inline-flex;align-items:center;gap:4px;background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:800;color:#E65100;cursor:pointer;}
@@ -3322,15 +3324,27 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       const w = Store.getWeek(castName, cwk);
       return (w && w.vacations && w.vacations[ds]) || null;
     }
-    // 未提出キャスト（長期休暇中を除外）
+    /* ★ 未提出キャストの判定（2026/08/02 修正）
+       以前は「その週に1日でも長期休暇があれば週ごと除外」していたため、
+       例：7/20まで休暇 → 7/21(火)から出勤できるのに未提出リストに出ず、
+       催促されないまま埋もれていた。
+       休暇でない日が1日でもあれば「提出が必要な週」として扱う。 */
+    function vacationDaysOf(castName){
+      return dates.filter(ds => !!getVacationForCast(castName, ds));
+    }
     const unsubmitted = castList.filter(c=>{
-      const hasVacation = dates.some(ds=>!!getVacationForCast(c.name, ds));
-      if(hasVacation) return false;
+      const vac = vacationDaysOf(c.name);
+      if(vac.length >= dates.length) return false;   // 全日休暇のときだけ除外
       const w = Store.getWeek(c.name, wk);
       return !w || w.status==='unsubmitted';
     });
-    const onVacation = castList.filter(c=>{
-      return dates.some(ds=>!!getVacationForCast(c.name, ds));
+    // 全日休暇の人だけ「長期休暇中」として扱う（一部休暇の人は未提出側に出す）
+    const onVacation = castList.filter(c=> vacationDaysOf(c.name).length >= dates.length);
+    // 一部だけ休暇の人（未提出リストに休暇日を添えて表示するため）
+    const partialVacation = {};
+    castList.forEach(c=>{
+      const v = vacationDaysOf(c.name);
+      if(v.length > 0 && v.length < dates.length) partialVacation[c.name] = v;
     });
 
     // シフト時間の短縮ラベル（start-end、翌時間は24引く）
@@ -3398,9 +3412,17 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       ? '<div class="hc-none">✅ 全員提出済み</div>'
       : `<div class="hc-unsub-chips">${unsubmitted.map(c=>{
           const reminded = (notes.remindedCasts||[]).includes(c.name);
+          // ★ 一部だけ長期休暇の人は「いつまで休みか」を添える（催促時の判断材料）
+          const pv = partialVacation[c.name];
+          let vacTag = '';
+          if(pv && pv.length){
+            const last = pv[pv.length-1];
+            const d = new Date(last+'T12:00:00');
+            vacTag = `<span class="hc-unsub-vac">🏖️${d.getMonth()+1}/${d.getDate()}まで休暇</span>`;
+          }
           return `<label class="hc-unsub-chip ${reminded?'reminded':''}">
             <input type="checkbox" ${reminded?'checked':''} onchange="StaffApp.toggleRemind('${wk}','${esc(c.name)}',this.checked)">
-            ${esc(c.name)}${reminded?' ✓':''}
+            ${esc(c.name)}${reminded?' ✓':''}${vacTag}
           </label>`;
         }).join('')}</div>`;
 
@@ -3436,6 +3458,12 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       <div class="hc-unsub-list">${unsubHtml}</div>
       ${vacHtml}
 
+      <div class="hc-section-title" style="margin-top:14px">🗒 この週の備考欄</div>
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <textarea class="hc-memo" id="hcWeekMemo" placeholder="この週のメモ（内勤のみ）">${esc(notes.memo||'')}</textarea>
+        <button class="hc-date-memo-btn" style="white-space:nowrap;padding:10px 14px" onclick="StaffApp.saveHcMemo('${wk}',document.getElementById('hcWeekMemo').value)">保存</button>
+      </div>
+
       <div class="hc-table-title">🕐 時間帯別 在籍人数 <span class="hc-table-sub">${weekLabel(wk)}</span></div>
       <div class="hc-table-wrap">
         <table class="hc-table">
@@ -3451,11 +3479,6 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
         </table>
       </div>
 
-      <div class="hc-section-title" style="margin-top:16px">🗒 この週の備考欄</div>
-      <div style="display:flex;gap:8px;align-items:flex-start">
-        <textarea class="hc-memo" id="hcWeekMemo" placeholder="この週のメモ（内勤のみ）">${esc(notes.memo||'')}</textarea>
-        <button class="hc-date-memo-btn" style="white-space:nowrap;padding:10px 14px" onclick="StaffApp.saveHcMemo('${wk}',document.getElementById('hcWeekMemo').value)">保存</button>
-      </div>
       <div style="margin-top:12px;display:flex;justify-content:flex-end">
         <span style="font-size:11px;color:var(--text2)">📢 出勤募集情報は毎朝9時に自動更新されてキャストに通知されます（この表と同じ集計です）</span>
       </div>`;

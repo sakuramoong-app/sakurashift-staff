@@ -1511,6 +1511,33 @@ const Store = (function(){
 /* ★ 保存が失敗したことを確実に伝える
    セッション切れだと保存が全部失敗するのに小さな表示しか出ず、
    「操作したのに保存されていない」ことに気づけなかったため。 */
+/* ============================================================
+   ★ 保存できなかった記録を残す仕組み
+   保存が失敗しているときはログ送信も同じ経路なので一緒に失敗する。
+   そこで失敗内容をブラウザに貯めておき、通信が回復したときに送る。
+   ============================================================ */
+const _PENDING_LOG_KEY = 'pendingLogs_v1';
+function _queueFailureLog(entry){
+  try{
+    const arr = JSON.parse(localStorage.getItem(_PENDING_LOG_KEY) || '[]');
+    arr.push(Object.assign({ at: new Date().toISOString() }, entry));
+    localStorage.setItem(_PENDING_LOG_KEY, JSON.stringify(arr.slice(-100)));
+  }catch(e){}
+}
+async function _flushPendingLogs(poster){
+  let arr = [];
+  try{ arr = JSON.parse(localStorage.getItem(_PENDING_LOG_KEY) || '[]'); }catch(e){ return; }
+  if(!arr.length) return;
+  try{
+    const entries = arr.map(function(x){
+      return { type:'SAVE_FAILED', cast:x.cast||'', week:x.week||'',
+               by:x.by||'', detail:'⚠️ ' + (x.at||'').replace('T',' ').slice(0,16) + ' に保存できませんでした（' + (x.reason||'原因不明') + '）' };
+    });
+    const r = await poster({ action:'addLogs', data: JSON.stringify(entries) });
+    if(r && r.success) localStorage.removeItem(_PENDING_LOG_KEY);
+  }catch(e){}
+}
+
 let _saveAlertShown = false;
 function _notifySaveFailure(resp){
   const err = (resp && resp.error) || '';
@@ -1570,7 +1597,7 @@ function _weekDiffText(df, statusBefore, statusAfter){
 function _auditDetail(a){
   const b=a.before||{}, af=a.after||{};
   switch(a.action){
-    case 'CONFIRM_WEEK': return a.by==='auto' ? '過去週を自動整理' : 'キャストへ確認通知を送信';
+    case 'CONFIRM_WEEK': return a.by==='auto' ? '過去週を自動整理' : '確認通知';
     case 'ACCEPT_CHANGE': return '変更リクエストを受理';
     case 'REJECT_CHANGE': return '変更リクエストを却下';
     case 'DELETE_WEEK': return 'シフトを削除';
@@ -1579,11 +1606,13 @@ function _auditDetail(a){
     case 'SUBMIT_WEEK': return 'シフトを提出';
     case 'CAST_SUBMIT': return 'シフトを提出';
     case 'CHECK_ON': return 'チェック';
+    case 'SAVE_FAILED': return '保存できず';
+    case 'LOGIN': return 'ログイン';
     case 'CHECK_OFF': return 'チェック解除';
     case 'SHIFT_ADD': return '出勤追加';
     case 'SHIFT_CHG': return '時間変更';
     case 'SHIFT_DEL': return '出勤消滅';
-    case 'MERGE': return '競合を統合';
+    case 'MERGE': return '同時編集';
     case 'WEEK_SAVE': return '週を保存';
     default: return a.action;
   }
@@ -1718,7 +1747,7 @@ const StaffGas = {
             Store.dispatch('CLEAR_DIRTY',{key});
             console.info('[merge] 競合をマージして保存しました', cast, wk);
             this._post({action:'addLog', type:'MERGE', cast, week:wk,
-              detail:'⚠️競合を統合して保存 ' + (_dtext || '(差分なし)'), by:_by}).catch(()=>{});
+              detail:'他の人の変更と同時だったため、両方を残して保存しました ' + (_dtext || ''), by:_by}).catch(()=>{});
             if(_entries.length) this._post({action:'addLogs', data:JSON.stringify(_entries)}).catch(()=>{});
             if(typeof toast==='function') toast('🔄 他の変更と統合して保存しました');
           }else{
@@ -1729,6 +1758,7 @@ const StaffGas = {
           }
         }else if(resp && resp.success){
           Store.setBaseSnapshot(cast, wk, data);   // ★ 保存できた内容を新しい基準にする
+          _flushPendingLogs(this._post.bind(this));   // ★ 通信が回復したので失敗記録を送る
           Store.dispatch('CLEAR_DIRTY',{key});
           if(_entries.length){
             // ★ 媒体1件ずつを1回の通信でまとめて送る（通信回数を増やさない）
@@ -1738,6 +1768,8 @@ const StaffGas = {
           allOk=false;
           console.warn('[save] 保存に失敗', cast, wk, resp);
           _notifySaveFailure(resp);
+          _queueFailureLog({cast, week:wk, by:(sessionStorage.getItem('staffName')||'内勤'),
+                            reason:((resp && resp.error) || '通信エラー') + ' / 画面の版 ' + APP_VERSION});
         }
       }catch(e){ allOk=false; console.warn('保存エラー',key,e); }
     }
@@ -2604,7 +2636,8 @@ const StaffApp = (function(){
     autoSave();
   }
 
-  const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'];
+  const APP_VERSION = '2026.08.02';   // ★画面の版。ログ・ヘルプに表示し、古い画面の判別に使う
+const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸町','ドレスガーデン','ピーチムーン','逆AF倶楽部','キューティー','18','極門','ヘブンラナ','ヘブンサクラ','(キュ)ぴゅあらば','(キュ)情報局','(極)ぴゅあらば','(極)情報局'];
 
   async function toggleDayAll(cast, wk, ds){
     if(!_canCheckWeek(cast, wk)) return;
@@ -2804,9 +2837,89 @@ const StaffApp = (function(){
   function setSaveState(s){
     const el=document.getElementById('staffSaveState');
     if(!el)return;
-    const map={saved:'✅ 保存済み',saving:'<span class="spinner"></span>保存中…',error:'⚠️ 保存に失敗（再試行します）'};
+    const map={saved:'✅ 保存済み',saving:'<span class="spinner"></span>保存中…',error:'⏳ 未保存（自動で保存し直しています）'};
     el.innerHTML=map[s]||'✅ 保存済み';
-    el.style.color=s==='error'?'#E05260':'';
+    el.style.color=s==='error'?'#E9A23B':'';
+    if(s==='error') _scheduleRetrySave();   // ★ 未保存を放置せず自動で送り直す
+  }
+
+  /* ★ 保存できなかった分を自動で再送する
+     以前は失敗すると未保存のまま放置され、次に何か操作するまで
+     保存されなかった（表示も「失敗」のまま残っていた）。 */
+  let _retryTimer = null, _retryCount = 0;
+  function _scheduleRetrySave(){
+    if(_retryTimer) return;
+    _retryTimer = setTimeout(async ()=>{
+      _retryTimer = null;
+      if(Store.getDirtyKeys().length === 0){ setSaveState('saved'); return; }
+      _retryCount++;
+      const ok = await StaffGas.flushNow();
+      if(ok){
+        _retryCount = 0;
+        setSaveState('saved');
+        if(typeof toast==='function') toast('✅ 保存が完了しました');
+      }else if(_retryCount < 6){
+        setSaveState('error');   // さらに再試行
+      }else{
+        _retryCount = 0;
+        const el=document.getElementById('staffSaveState');
+        if(el){ el.innerHTML='⚠️ 保存できていません（画面を開いたままにしてください）'; el.style.color='#E05260'; }
+      }
+    }, 5000 * Math.min(_retryCount + 1, 4));
+  }
+
+
+  // ログの見方ヘルプ
+  function openLogHelp(){
+    const ex=document.getElementById('logHelpModal'); if(ex) ex.remove();
+    const rows=[
+      ['データが消えた気がする','⬜チェック解除 / 🗑️出勤消滅','誰がいつ消したか出ます。記録が無ければ、消えていない可能性が高いです（別の週・別の月を見ていないか確認）'],
+      ['チェックしたのに反映されない','⚠️保存できず','出ていれば通信の問題です。画面を開いたまま待てば自動で保存されます'],
+      ['「⏳ 未保存」が消えない','⚠️保存できず','6回失敗すると赤くなります。その時は一度ログインし直してください'],
+      ['「同時編集」と出た','同時編集','<b>データは両方残っています。</b>対処は不要です'],
+      ['キャストが名簿から消えた','設定を保存（人数付き） / キャスト削除','誰がいつ減らしたか分かります'],
+      ['通知が届かない','確認通知 / 提出','ログにあれば送信済みです。メールアドレスの設定を確認してください'],
+      ['チェックが勝手に外れた','受理','変更申請を受理すると、その日のチェックは<b>仕様として全部外れます</b>（入力し直しが必要なため）']
+    ];
+    const m=document.createElement('div');
+    m.id='logHelpModal';
+    m.style.cssText='position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    m.innerHTML=`
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.45)" id="logHelpBg"></div>
+      <div style="position:relative;background:#fff;border-radius:20px;padding:20px;max-width:620px;width:100%;max-height:86vh;overflow:auto;box-shadow:0 12px 48px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:16px;font-weight:800;color:var(--text)">❓ ログの見方・困ったときは</div>
+          <button id="logHelpClose" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--text2)">✕</button>
+        </div>
+        <div style="background:#F0FBF4;border:2px solid var(--line);border-radius:12px;padding:11px 13px;font-size:12.5px;line-height:1.7;color:var(--text);margin-bottom:14px">
+          まず落ち着いて、下の表の「見るところ」で絞り込んでください。<br>
+          <b>ログに記録があれば、誰がいつ何をしたかが必ず分かります。</b>
+        </div>
+        ${rows.map(r=>`
+          <div style="border-bottom:1px solid var(--line);padding:10px 0">
+            <div style="font-weight:800;font-size:13.5px;color:var(--text);margin-bottom:4px">🔎 ${r[0]}</div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:3px">見るところ： <b style="color:var(--mint-deep)">${r[1]}</b></div>
+            <div style="font-size:12.5px;color:var(--text);line-height:1.6">${r[2]}</div>
+          </div>`).join('')}
+        <div style="margin-top:16px;background:#FFF8FC;border:2px solid #FFE0EC;border-radius:12px;padding:12px 13px;font-size:12.5px;line-height:1.8;color:var(--text)">
+          <b>⚠️ ログに記録が無いのにデータが消えている場合</b><br>
+          次のどれかの可能性があります。管理者に連絡してください。<br>
+          ・誰かが<b>古い画面</b>を使っている（下の版を全員で見比べてください）<br>
+          ・スプレッドシートを直接編集した<br>
+          ・まだ分かっていない不具合
+        </div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text2)">この画面の版： <b style="color:var(--text)">${APP_VERSION}</b></span>
+          <button id="logHelpReload" style="padding:7px 14px;border:2px solid var(--mint-deep);border-radius:99px;background:#fff;color:var(--mint-deep);font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">🔄 最新の画面に更新する</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+    m.querySelector('#logHelpClose').addEventListener('click',()=>m.remove());
+    m.querySelector('#logHelpBg').addEventListener('click',()=>m.remove());
+    m.querySelector('#logHelpReload').addEventListener('click',()=>{
+      if(Store.getDirtyKeys().length>0){ alert('未保存の変更があります。「✅ 保存済み」になってから更新してください'); return; }
+      location.reload(true);
+    });
   }
 
   // 操作ログをモーダルで表示
@@ -2820,7 +2933,7 @@ const StaffApp = (function(){
       <div style="position:absolute;inset:0;background:rgba(0,0,0,.4)" id="logsModalBg"></div>
       <div style="position:relative;background:#fff;border-radius:18px;max-width:600px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25)">
         <div style="padding:16px 20px;border-bottom:2px solid var(--line);display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:16px;font-weight:800;color:var(--text)">📋 操作ログ（新しい順）</div>
+          <div style="font-size:16px;font-weight:800;color:var(--text)">📋 操作ログ（新しい順）<button id="logHelpBtn" title="ログの見方" style="margin-left:8px;width:22px;height:22px;border-radius:50%;border:2px solid var(--mint-deep);background:#fff;color:var(--mint-deep);font-weight:800;font-size:12px;cursor:pointer;line-height:1;padding:0">?</button></div>
           <button id="logsClose" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2)">×</button>
         </div>
         <div style="padding:12px 20px 8px;border-bottom:1px solid var(--line)">
@@ -2831,6 +2944,7 @@ const StaffApp = (function(){
             <button class="log-filter-chip" data-lf="CONFIRM_WEEK" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">確認通知</button>
             <button class="log-filter-chip" data-lf="ACCEPT_CHANGE" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">変更受理</button>
             <button class="log-filter-chip" data-lf="DELETE_CAST" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">キャスト削除</button>
+            <button class="log-filter-chip" data-lf="SAVE_FAILED" style="padding:5px 11px;border-radius:99px;border:2px solid #FFB9B9;background:#FFF5F5;color:#E05260;font-size:11px;font-weight:800;cursor:pointer">⚠️保存できず</button>
             <button class="log-filter-chip" data-lf="CHECK_ON" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">☑️チェック</button>
             <button class="log-filter-chip" data-lf="CHECK_OFF" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">⬜チェック解除</button>
             <button class="log-filter-chip" data-lf="SHIFT_DEL" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">🗑️出勤消滅</button>
@@ -2856,26 +2970,78 @@ const StaffApp = (function(){
       if(_logSearch) logs=logs.filter(l=>(l.cast||'').includes(_logSearch)||(l.by||'').includes(_logSearch));
       if(logs.length===0){ body.innerHTML='<div style="color:var(--text2);font-size:13px">該当するログはありません</div>'; return; }
       body.innerHTML='';
+      /* ★ 見やすさ対策：情報は減らさず「まとめて表示」する
+         ・日付ごとに見出しを入れる
+         ・同じ人が同じ種類の操作を連続でした分は1行にまとめ、
+           ▸を押すと中身（媒体ごとの明細）を全部見られる */
+      const groups=[];
       logs.forEach(l=>{
+        const g=groups[groups.length-1];
+        const t=new Date(l.time).getTime();
+        if(g && g.type===l.type && g.by===l.by && g.cast===l.cast && Math.abs(g.t-t)<=120000){
+          g.items.push(l);
+        }else{
+          groups.push({type:l.type, by:l.by, cast:l.cast, week:l.week, t:t, time:l.time, items:[l]});
+        }
+      });
+      let _lastDay='';
+      groups.forEach(g=>{
+        const l=g.items[0];
         const d=new Date(l.time);
-        const dstr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const dayKey=`${d.getMonth()+1}/${d.getDate()}`;
+        if(dayKey!==_lastDay){
+          _lastDay=dayKey;
+          const wd=['日','月','火','水','木','金','土'][d.getDay()];
+          const h=document.createElement('div');
+          h.style.cssText='position:sticky;top:0;background:var(--bg,#fff);z-index:1;padding:10px 0 5px;margin-top:6px;font-size:12px;font-weight:800;color:var(--text2);border-bottom:2px solid var(--line)';
+          h.textContent=`${dayKey}（${wd}）`;
+          body.appendChild(h);
+        }
+        const dstr=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         // タイプ別の色タグ
         const tagColor = l.type==='CAST_SUBMIT'?'#5FD0A0':l.type==='CONFIRM_WEEK'?'#4A9EE0':l.type==='ACCEPT_CHANGE'?'#E9A23B'
           :(l.type==='DELETE_WEEK'||l.type==='DELETE_CAST'||l.type==='SHIFT_DEL'||l.type==='CHECK_OFF')?'#E05260'
-          :l.type==='CHECK_ON'?'#5FD0A0':l.type==='MERGE'?'#B06BD0'
+          :l.type==='CHECK_ON'?'#5FD0A0':l.type==='MERGE'?'#B06BD0':l.type==='SAVE_FAILED'?'#E05260':l.type==='LOGIN'?'#B8C2CC'
           :(l.type==='SHIFT_ADD'||l.type==='SHIFT_CHG')?'#4A9EE0':'#999';
+        const label=_auditDetail({action:l.type, by:l.by});
+        const wkTxt=g.week?`<span style="color:var(--text2);font-size:11px;margin-left:4px">${esc(_wkLabel(g.week))}の週</span>`:'';
+        const n=g.items.length;
         const row=document.createElement('div');
-        row.style.cssText='padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
-        row.innerHTML=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `
-          +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(_auditDetail({action:l.type, by:l.by}))}</span> `
+        row.style.cssText='padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
+        const head=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `
+          +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(label)}</span> `
           +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span>`
           +(l.cast?` → <span style="font-weight:700">${esc(l.cast)}</span>`:'')
-          +(l.detail&&l.detail!==_auditDetail({action:l.type, by:l.by})?`<div style="color:var(--text2);font-size:12px;margin-top:3px;white-space:pre-wrap;line-height:1.5;padding-left:8px">${esc(l.detail)}</div>`:'');
+          +wkTxt
+          +(n>1?` <span style="font-weight:800;color:${tagColor}">${n}件</span>`:'');
+        if(n>1){
+          // まとめ表示：▸で明細を開く（情報は消さない）
+          row.innerHTML=head
+            +`<div style="margin-top:3px"><button class="log-more" style="border:none;background:none;color:var(--text2);font-size:11.5px;font-weight:800;cursor:pointer;padding:2px 0">▸ 明細を見る（${n}件）</button>`
+            +`<div class="log-detail" style="display:none;color:var(--text2);font-size:12px;margin-top:4px;padding-left:10px;border-left:2px solid var(--line);line-height:1.7">`
+            + g.items.map(x=>esc(x.detail||'')).join('<br>') + `</div></div>`;
+          const btn=row.querySelector('.log-more'), det=row.querySelector('.log-detail');
+          btn.addEventListener('click',()=>{
+            const open=det.style.display!=='none';
+            det.style.display=open?'none':'block';
+            btn.textContent=(open?'▸ 明細を見る（':'▾ 明細を閉じる（')+n+'件）';
+          });
+        }else{
+          row.innerHTML=head
+            +(l.detail&&l.detail!==label?`<div style="color:var(--text2);font-size:12px;margin-top:3px;white-space:pre-wrap;line-height:1.5;padding-left:8px">${esc(l.detail)}</div>`:'');
+        }
         body.appendChild(row);
       });
     }
 
+    // 週キー（2026-08-03）を「8/3」に
+    function _wkLabel(wk){
+      const p=String(wk||'').split('-');
+      return p.length>=3 ? (+p[1])+'/'+(+p[2]) : (wk||'');
+    }
+
     // 検索・フィルターのイベント
+    modal.querySelector('#logHelpBtn').addEventListener('click',(ev)=>{ ev.stopPropagation(); openLogHelp(); });
     modal.querySelector('#logsSearch').addEventListener('input',(e)=>{ _logSearch=e.target.value.trim(); renderLogs(); });
     modal.querySelectorAll('.log-filter-chip').forEach(chip=>{
       chip.addEventListener('click',()=>{
@@ -3588,6 +3754,17 @@ KANA_GROUPS.forEach(g=>{
     resetIdle();
   })();
 })();
+
+/* ★ 未保存のまま閉じようとしたら警告する（唯一の実質的なデータ消失を防ぐ） */
+window.addEventListener('beforeunload', function(e){
+  try{
+    if(typeof Store !== 'undefined' && Store.getDirtyKeys && Store.getDirtyKeys().length > 0){
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    }
+  }catch(_){ }
+});
 </script>
 </body>
 </html>

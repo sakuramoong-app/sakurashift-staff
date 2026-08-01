@@ -1612,7 +1612,15 @@ const StaffGas = {
         clearTimeout(busyTimer);
         const text = await res.text();
         if(text.trim().startsWith('<')){ throw new Error('GAS_HTML_ERROR'); }
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        /* ★ BUSY（サーバー側の排他ロック待ちタイムアウト）は通信エラーではなく
+           正常な応答として返るため、そのままでは再試行されない。
+           混雑が解けるのを待って自動で送り直す（利用者には気づかせない）。 */
+        if(parsed && parsed.error === 'BUSY' && attempt < maxRetries){
+          await new Promise(r=>setTimeout(r, 2000*(attempt+1)));
+          continue;
+        }
+        return parsed;
       }catch(e){
         clearTimeout(busyTimer);
         lastErr = e;

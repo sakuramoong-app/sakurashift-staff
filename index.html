@@ -58,6 +58,35 @@
 const GAS_URL='https://script.google.com/macros/s/AKfycbyvlg5JbvPsqxkdvztwRXYBqPkvWjknicwfm2ksTlIxIQ-7N1zd72cn09c6oSNIkIxw/exec';
 const TOKEN='sakura2025shift';
 
+/* ★ 通信の再試行つき取得
+   GASは応答の途中でリダイレクトを挟むため、稀にJSONではなくHTMLを返す。
+   一度で諦めると「通信エラー」になってしまうので、少し待って自動で送り直す。 */
+async function gasGet(params, maxRetries){
+  maxRetries = (maxRetries==null) ? 2 : maxRetries;
+  let lastErr = null;
+  for(let i=0; i<=maxRetries; i++){
+    try{
+      const qs = new URLSearchParams(Object.assign({token:TOKEN,_t:Date.now()}, params)).toString();
+      const ctrl = new AbortController();
+      const timer = setTimeout(()=>ctrl.abort(), 30000);
+      const res = await fetch(GAS_URL+'?'+qs, {signal:ctrl.signal});
+      clearTimeout(timer);
+      const text = await res.text();
+      if(text.trim().startsWith('<')) throw new Error('GAS_HTML_ERROR');   // エラーページ
+      const data = JSON.parse(text);
+      if(data && data.error === 'BUSY' && i < maxRetries){                  // 混雑時は待って再送
+        await new Promise(r=>setTimeout(r, 1500*(i+1)));
+        continue;
+      }
+      return data;
+    }catch(e){
+      lastErr = e;
+      if(i < maxRetries) await new Promise(r=>setTimeout(r, 1200*(i+1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function sha256(str){
   const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -82,9 +111,7 @@ async function sha256(str){
 
   const tryFetch=async(retry)=>{
     try{
-      const qs=new URLSearchParams({token:TOKEN,action:'loadStaffNames',_t:Date.now()}).toString();
-      const res=await fetch(GAS_URL+'?'+qs);
-      const data=await res.json();
+      const data=await gasGet({action:'loadStaffNames'}, 0);   // 再試行は下のtryFetchが担当
       const staffList=data.staffList||[];
       if(staffList.length){
         localStorage.setItem('staffNames',JSON.stringify(staffList));
@@ -114,9 +141,7 @@ async function doLogin(){
   try{
     const hash=await sha256(pw);
     // GAS側で照合（PWはブラウザに保持しない）
-    const qs=new URLSearchParams({token:TOKEN,action:'login',role:'staff',name:name,pwHash:hash,_t:Date.now()}).toString();
-    const res=await fetch(GAS_URL+'?'+qs);
-    const data=await res.json();
+    const data=await gasGet({action:'login',role:'staff',name:name,pwHash:hash});
     loading.style.display='none';
 
     if(data.success){
@@ -133,7 +158,7 @@ async function doLogin(){
     }
   }catch(e){
     loading.style.display='none';
-    err.textContent='通信エラーが発生しました。もう一度お試しください';
+    err.textContent='通信できませんでした。電波の良い場所で、もう一度お試しください';
     err.style.display='block';
   }
 }

@@ -1625,16 +1625,18 @@ const StaffGas = {
   _showBusyMsg(){
     try{
       const lt=document.getElementById('loadingText');
-      if(lt) lt.textContent='🌸 サーバーが混雑しています。少々お待ちください…';
+      if(lt) lt.textContent='🌸 データが多いため少し時間がかかっています…';
       const cl=document.querySelector('.cal-loading');
-      if(cl) cl.innerHTML='<span class="spinner"></span>🌸 混雑しています。少々お待ちください…';
+      if(cl) cl.innerHTML='<span class="spinner"></span>🌸 もう少しお待ちください…';
     }catch(_){}
   },
   async _fetchWithRetry(url, options, maxRetries=2){
     let lastErr;
     for(let attempt=0; attempt<=maxRetries; attempt++){
       // 3秒返らなければ「混雑中」案内を出す（リクエストは切らずに待つ）
-      const busyTimer = setTimeout(()=>this._showBusyMsg(), 3000);
+      // ★ 初回はデータ量が多く3秒は普通に超えるため、
+      //   「混雑」表示は8秒待ってから出す（正常なのに不安にさせないため）
+      const busyTimer = setTimeout(()=>this._showBusyMsg(), 8000);
       try{
         const ctrl = new AbortController();
         const timer = setTimeout(()=>ctrl.abort(), 40000);
@@ -1659,9 +1661,9 @@ const StaffGas = {
           // リトライ中は「混雑中」メッセージに切り替え
           try{
             const lt=document.getElementById('loadingText');
-            if(lt) lt.textContent='サーバーが混雑しています。再試行中…';
+            if(lt) lt.textContent='接続し直しています…';
             const cl=document.querySelector('.cal-loading');
-            if(cl) cl.innerHTML='<span class="spinner"></span>🌸 混雑中、再試行しています…';
+            if(cl) cl.innerHTML='<span class="spinner"></span>🌸 接続し直しています…';
           }catch(_){}
           await new Promise(r=>setTimeout(r, 1000*(attempt+1)));
         }
@@ -1851,11 +1853,19 @@ const StaffApp = (function(){
     role = (opts && opts.role) || 'staff';
     setBusy(true,'読み込み中…');
     try{
-      await Promise.all([
-        StaffGas.loadMaster(),
-        StaffGas.loadMonthAll(viewYM),       // チェック画面用（表示中の月）
-        StaffGas.loadAllWeeks(),              // 受信ボックス用（全期間）
-      ]);
+      /* ★ loadAllWeeks は直近3ヶ月分を読むので、今月分の loadMonthAll と中身が重複する。
+         同じデータを2回読むと初回表示が倍かかるため、
+         表示中の月が3ヶ月の範囲外のときだけ追加で読む。 */
+      const _needMonth = (function(){
+        try{
+          const d=new Date(); d.setMonth(d.getMonth()-3);
+          const since = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+          return viewYM < since;   // 3ヶ月より古い月を見ているときだけ必要
+        }catch(e){ return true; }
+      })();
+      const _tasks = [ StaffGas.loadMaster(), StaffGas.loadAllWeeks() ];
+      if(_needMonth) _tasks.push(StaffGas.loadMonthAll(viewYM));
+      await Promise.all(_tasks);
     }catch(e){ /* 個別のcatchで握るが念のため */ }
     // マスタが読めなかった場合は再試行案内を表示
     const castList = Store.getCastList();

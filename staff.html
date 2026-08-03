@@ -1855,21 +1855,17 @@ const StaffApp = (function(){
   async function init(opts){
     role = (opts && opts.role) || 'staff';
     setBusy(true,'読み込み中…');
+    /* ★ 待ち時間対策（2026/08/03）
+       以前は「画面表示に必要な今月分」と「受信ボックス用の全期間」が
+       両方そろうまで画面を出さなかったため、遅い方に引きずられていた。
+       画面に必要なものだけ待って先に表示し、受信ボックスは後から埋める。 */
     try{
-      /* ★ loadAllWeeks は直近3ヶ月分を読むので、今月分の loadMonthAll と中身が重複する。
-         同じデータを2回読むと初回表示が倍かかるため、
-         表示中の月が3ヶ月の範囲外のときだけ追加で読む。 */
-      const _needMonth = (function(){
-        try{
-          const d=new Date(); d.setDate(d.getDate()-42);
-          const since = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-          return viewYM < since;   // 6週間より古い月を見ているときだけ必要
-        }catch(e){ return true; }
-      })();
-      const _tasks = [ StaffGas.loadMaster(), StaffGas.loadAllWeeks() ];
-      if(_needMonth) _tasks.push(StaffGas.loadMonthAll(viewYM));
-      await Promise.all(_tasks);
+      await Promise.all([
+        StaffGas.loadMaster(),
+        StaffGas.loadMonthAll(viewYM),   // 表示中の月だけ＝軽い
+      ]);
     }catch(e){ /* 個別のcatchで握るが念のため */ }
+
     // マスタが読めなかった場合は再試行案内を表示
     const castList = Store.getCastList();
     if(!castList || castList.length===0){
@@ -1880,7 +1876,28 @@ const StaffApp = (function(){
     Store.dispatch('SET_USER',{user:{type:role,name:staffName}});
     Store.dispatch('SET_STAFF_NAME',{name:staffName});
     setBusy(false);
-    renderAll();
+    renderAll();          // ← ここでもう操作できる
+
+    // 受信ボックス用のデータは裏で読み込み、届いたら表示を更新する
+    _loadInboxInBackground();
+  }
+
+  // 受信ボックスを後追いで読み込む（画面の操作は止めない）
+  let _inboxLoading = false;
+  async function _loadInboxInBackground(){
+    if(_inboxLoading) return;
+    _inboxLoading = true;
+    const badge = document.getElementById('inboxCount');
+    if(badge){ badge.textContent='…'; badge.title='集計中です'; }
+    try{
+      await StaffGas.loadAllWeeks();
+      renderAll();
+    }catch(e){
+      console.warn('受信ボックス読込エラー', e);
+      if(badge){ badge.textContent='!'; badge.title='読み込めませんでした。更新ボタンを押してください'; }
+    }finally{
+      _inboxLoading = false;
+    }
   }
 
   // 読み込み失敗時：再試行画面

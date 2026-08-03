@@ -1707,8 +1707,11 @@ const StaffGas = {
   },
   async loadAllWeeks(){
     try{
-      // ★ 軽量化：直近3ヶ月分の週だけ読む（データ増加に強い）
-      const d=new Date(); d.setMonth(d.getMonth()-3);
+      /* ★ 軽量化：直近6週間ぶんだけ読む（未来の週は常に含まれる）
+         受信ボックスで扱うのは提出・変更申請といった直近のものだけ。
+         3ヶ月分を読むと初回表示に20秒以上かかっていた。
+         過去の月を見るときは月移動で別途読み込まれるので支障はない。 */
+      const d=new Date(); d.setDate(d.getDate()-42);
       // 3ヶ月前が属する週の月曜を求める
       const dow=d.getDay(); const diff=dow===0?-6:1-dow;
       d.setDate(d.getDate()+diff);
@@ -1858,9 +1861,9 @@ const StaffApp = (function(){
          表示中の月が3ヶ月の範囲外のときだけ追加で読む。 */
       const _needMonth = (function(){
         try{
-          const d=new Date(); d.setMonth(d.getMonth()-3);
+          const d=new Date(); d.setDate(d.getDate()-42);
           const since = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-          return viewYM < since;   // 3ヶ月より古い月を見ているときだけ必要
+          return viewYM < since;   // 6週間より古い月を見ているときだけ必要
         }catch(e){ return true; }
       })();
       const _tasks = [ StaffGas.loadMaster(), StaffGas.loadAllWeeks() ];

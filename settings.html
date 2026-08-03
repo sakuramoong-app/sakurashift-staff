@@ -1120,17 +1120,25 @@ const MasterGas = {
     const res = await fetch(CONFIG.GAS_URL, {method:'POST', body});
     return res.json();
   },
+  /* ★ 読み込みに失敗したことを必ず呼び出し元へ伝える。
+     以前は失敗しても静かに空のまま進み、画面には「まだキャストがいません」と出た。
+     その状態で保存すると空の名簿で全員が消えるため、極めて危険だった。 */
   async load(){
-    try{
-      const r = await this._get({action:'loadMaster'});
-      if(r && r.master){ Store.dispatch('LOAD_MASTER', r.master); }
-      return r && r.master;
-    }catch(e){ console.warn('マスタ読込エラー', e); return null; }
+    const r = await this._get({action:'loadMaster'});   // 失敗時は例外を投げる
+    if(!r || !r.master) throw new Error('MASTER_EMPTY');
+    Store.dispatch('LOAD_MASTER', r.master);
+    return r.master;
   },
   async save(){
     // _masterDirtyではなく_unsavedで制御（settings変更はLOAD_MASTERを使うため）
     try{
       const master = Store.getMaster();
+      /* ★ 最終防衛：キャストも内勤も0人のマスタは保存しない。
+         読み込み失敗のまま保存すると全員が消えるため。 */
+      if(!master || ((master.castList||[]).length===0 && (master.staffList||[]).length===0)){
+        alert('⚠️ 設定が正しく読み込めていないため、保存を中止しました。\n\nデータは消えていません。画面を読み込み直してください。');
+        return false;
+      }
       const r = await this._post({action:'saveMaster', data:JSON.stringify(master)});
       if(r && r.success){ Store.clearMasterDirty(); return true; }
       return false;
@@ -1141,12 +1149,48 @@ const MasterGas = {
 const SettingsApp = (function(){
   let role = 'staff';
 
+  let _loadFailed = false;   // ★ 読み込みに失敗したら保存を禁止する
+
   async function init(opts){
     role = (opts && opts.role) || 'staff';
     setState('loading');
-    await MasterGas.load();
-    setState('saved');
-    renderAll();
+    try{
+      await MasterGas.load();
+      _loadFailed = false;
+      setState('saved');
+      renderAll();
+    }catch(e){
+      // ★ 空のまま画面を出さない。保存させないことが最優先
+      _loadFailed = true;
+      setState('error');
+      console.warn('マスタ読込エラー', e);
+      _showLoadError();
+    }
+  }
+
+  // 読み込み失敗を全画面で知らせる（誤って保存させない）
+  function _showLoadError(){
+    const root = document.getElementById('settingsRoot') || document.body;
+    const box = document.createElement('div');
+    box.id = 'settingsLoadError';
+    box.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(255,255,255,.97);display:flex;align-items:center;justify-content:center;padding:24px;text-align:center';
+    box.innerHTML=`
+      <div style="max-width:420px">
+        <div style="font-size:44px;margin-bottom:12px">⚠️</div>
+        <div style="font-size:17px;font-weight:800;color:#E05260;margin-bottom:10px">設定を読み込めませんでした</div>
+        <div style="font-size:13.5px;color:#4A5560;line-height:1.9;margin-bottom:18px">
+          サーバーが混み合っている可能性があります。<br>
+          <b>データは消えていません。</b><br><br>
+          このまま操作すると設定が失われる恐れがあるため、<br>
+          読み込み直してください。
+        </div>
+        <button id="settingsRetry" style="padding:13px 26px;border:none;border-radius:14px;background:linear-gradient(135deg,#A7E8C8,#5FD0A0);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">🔄 もう一度読み込む</button>
+      </div>`;
+    document.body.appendChild(box);
+    box.querySelector('#settingsRetry').addEventListener('click',()=>{
+      box.remove();
+      init({role});
+    });
   }
 
   let _state='saved';

@@ -64,19 +64,40 @@ async function sha256(str){
 }
 
 // スタッフ名一覧のみ取得（PWはブラウザに読み込まない）
+// ★ loadMaster ではなく loadStaffNames を使う。
+//   マスタ全体（キャスト全員・設定・お知らせ）を読むと待ち時間が長くなるため。
+// ★ 前回選んだ名前を覚えておき、通信を待たずに先に表示する（体感を速くする）
 (async()=>{
-  try{
-    const qs=new URLSearchParams({token:TOKEN,action:'loadMaster',_t:Date.now()}).toString();
-    const res=await fetch(GAS_URL+'?'+qs);
-    const data=await res.json();
-    const master=data.master||{};
-    const staffList=master.staffList||[];
-    const sel=document.getElementById('staffSel');
+  const sel=document.getElementById('staffSel');
+  const cached=(()=>{ try{ return JSON.parse(localStorage.getItem('staffNames')||'[]'); }catch(e){ return []; } })();
+  const fill=(list)=>{
+    const cur=sel.value;
     sel.innerHTML='<option value="">選択してください</option>'+
-      staffList.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
-  }catch(e){
-    document.getElementById('staffSel').innerHTML='<option value="">読み込みに失敗しました</option>';
-  }
+      list.map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+    const last=localStorage.getItem('lastStaffName');
+    if(cur && list.some(s=>s.name===cur)) sel.value=cur;
+    else if(last && list.some(s=>s.name===last)) sel.value=last;
+  };
+  if(cached.length) fill(cached);   // まず前回の一覧を出す（待ち時間ゼロ）
+
+  const tryFetch=async(retry)=>{
+    try{
+      const qs=new URLSearchParams({token:TOKEN,action:'loadStaffNames',_t:Date.now()}).toString();
+      const res=await fetch(GAS_URL+'?'+qs);
+      const data=await res.json();
+      const staffList=data.staffList||[];
+      if(staffList.length){
+        localStorage.setItem('staffNames',JSON.stringify(staffList));
+        fill(staffList);
+      }else if(!cached.length){
+        sel.innerHTML='<option value="">スタッフが登録されていません</option>';
+      }
+    }catch(e){
+      if(retry>0){ await new Promise(r=>setTimeout(r,1500)); return tryFetch(retry-1); }
+      if(!cached.length) sel.innerHTML='<option value="">読み込みに失敗しました（再読み込みしてください）</option>';
+    }
+  };
+  await tryFetch(2);
 })();
 
 async function doLogin(){
@@ -118,6 +139,7 @@ async function doLogin(){
 }
 
 function go(name){
+  localStorage.setItem('lastStaffName',name);   // 次回そのまま選ばれた状態にする
   sessionStorage.setItem('staffName',name);
   sessionStorage.setItem('staffAuth','1');
   location.href='staff.html?name='+encodeURIComponent(name);

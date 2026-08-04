@@ -1012,8 +1012,8 @@ const Store = (function(){
             // ★ 未保存の変更がある週は上書きしない（上書きすると保存前の操作が消える）
             //   この場合baseも更新しない。保存時に競合マージで解決する。
             if(dirty.has(key)) continue;
-            state.weeks[cast][wk] = p.weeks[cast][wk];
-            setBaseSnapshot(cast, wk, p.weeks[cast][wk]);   // ★ マージ用の基準を記録
+            state.weeks[cast][wk] = _cleanupWeek(p.weeks[cast][wk]);
+            setBaseSnapshot(cast, wk, state.weeks[cast][wk]);   // ★ マージ用の基準を記録
           }
         }
         break;
@@ -1473,6 +1473,18 @@ const Store = (function(){
   function _isPlainObj(v){ return !!v && typeof v === 'object' && !Array.isArray(v); }
   function _eq(a, b){ return JSON.stringify(a) === JSON.stringify(b); }
 
+  /* ★ 壊れた出勤データの掃除（2026/08/05）
+     過去のマージ不具合で、消したはずの出勤が中身の無い箱として
+     残ってしまったデータがある。読み書きの前に取り除く。 */
+  function _cleanupWeek(w){
+    if(!w || !w.shifts) return w;
+    for(const ds in w.shifts){
+      const sh = w.shifts[ds];
+      if(!sh || sh.start == null || sh.end == null) delete w.shifts[ds];
+    }
+    return w;
+  }
+
   function mergeWeek3(base, local, server){
     base = _isPlainObj(base) ? base : {};
     local = _isPlainObj(local) ? local : {};
@@ -1495,6 +1507,13 @@ const Store = (function(){
         return;
       }
       // 両方が変えた場合
+      /* ★ 削除の扱い（2026/08/05 修正）
+         「自分が消した」ものを再帰マージに回すと、
+         中身が空のオブジェクト（例：shifts["2026-08-13"] = {}）が残ってしまい、
+         消したはずの出勤が「お休み」という名前の出勤として復活していた。
+         消したものは消したままにする。 */
+      if(!(k in local)) return;              // 自分が消した → 消えたまま
+      if(!(k in server)){ out[k] = l; return; }  // 相手が消したが自分は変更 → 自分を残す
       if(_isPlainObj(b) || _isPlainObj(l) || _isPlainObj(s)){
         out[k] = mergeWeek3(b, l, s);   // 日付・媒体などキー単位でさらにマージ
       }else{
@@ -1507,7 +1526,7 @@ const Store = (function(){
   // マージ結果を画面の状態へ反映し、新しい基準として記録する
   function applyMergedWeek(cast, wk, data){
     if(!state.weeks[cast]) state.weeks[cast] = {};
-    state.weeks[cast][wk] = data;
+    state.weeks[cast][wk] = _cleanupWeek(data);
     setBaseSnapshot(cast, wk, data);
   }
   function getDirtyWeek(key){
@@ -3207,10 +3226,18 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       });
     }
 
-    // 週キー（2026-08-03）を「8/3」に
+    /* 週キー（2026-08-03）を「8/3」に
+       ★ スプレッドシートが日付として解釈してしまい、
+         「2026-08-02T15:00:00.000Z」のような形で返ることがある。
+         その場合は日付として読み直す（そのままだと 8/NaN と表示される）。 */
     function _wkLabel(wk){
-      const p=String(wk||'').split('-');
-      return p.length>=3 ? (+p[1])+'/'+(+p[2]) : (wk||'');
+      if(!wk) return '';
+      const str = String(wk);
+      const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if(m) return (+m[2])+'/'+(+m[3]);
+      const d = new Date(str);
+      if(!isNaN(d.getTime())) return (d.getMonth()+1)+'/'+d.getDate();
+      return '';
     }
 
     // 検索・フィルターのイベント
@@ -3431,10 +3458,10 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     // キャストへ通知＋メール
     const beforeTxt = r.before ? fmtShift(r.before.start, r.before.end) : 'お休み';
     const afterTxt  = (type==='holiday') ? 'お休み' : fmtShift(start, end);
-    const msg = `${dateLabel} のシフトが変更されました。<br>`
-      + `<b>${beforeTxt} → ${afterTxt}</b>`
-      + (reason ? `<br>理由：${esc(reason)}` : '')
-      + `<br><br>変更したスタッフ：${esc(staffName||'内勤')}`;
+    // ★ キャスト側はHTMLタグをそのまま文字として表示するので、装飾せず文章で書く
+    const msg = `${dateLabel} のシフトを ${beforeTxt} → ${afterTxt} に変更しました`
+      + (reason ? `（${reason}）` : '')
+      + `／担当：${staffName||'内勤'}`;
     StaffGas.notify(cast, 'staff_change', msg).catch(()=>{});
 
     // 操作ログ
@@ -4034,19 +4061,30 @@ KANA_GROUPS.forEach(g=>{
     location.href='index.html';
   });
 
-  // ★ 自動ログアウト（30分無操作で即ログアウト）
+  /* ★ 自動ログアウト（2026/08/04 変更）
+     30分では業務中に切れてしまうため17時間に延長。
+     また、未保存の変更があるときはログアウトしない
+     （ログアウトすると未保存の操作が失われるため）。 */
   (function(){
-    const IDLE_LIMIT = 30 * 60 * 1000; // 30分
+    const IDLE_LIMIT = 17 * 60 * 60 * 1000; // 17時間
     let idleTimer = null;
+    function doLogout(){
+      // 未保存の変更が残っているうちはログアウトしない
+      try{
+        if(Store.getDirtyKeys && Store.getDirtyKeys().length > 0){
+          resetIdle();          // 保存が終わるまで様子を見る
+          return;
+        }
+      }catch(_){ }
+      sessionStorage.removeItem('staffAuth');
+      sessionStorage.removeItem('staffName');
+      sessionStorage.removeItem('staffSession');
+      alert('長時間操作がなかったため、自動ログアウトしました。');
+      location.href='index.html';
+    }
     function resetIdle(){
       if(idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(()=>{
-        sessionStorage.removeItem('staffAuth');
-        sessionStorage.removeItem('staffName');
-        sessionStorage.removeItem('staffSession');
-        alert('30分間操作がなかったため、自動ログアウトしました。');
-        location.href='index.html';
-      }, IDLE_LIMIT);
+      idleTimer = setTimeout(doLogout, IDLE_LIMIT);
     }
     ['click','keydown','touchstart','scroll'].forEach(ev=>{
       document.addEventListener(ev, resetIdle, {passive:true});

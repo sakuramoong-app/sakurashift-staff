@@ -137,6 +137,9 @@
   .check-rows{display:flex;flex-direction:column;gap:3px;}
   .check-row{display:flex;gap:0;background:#fff;border-radius:10px;border:1.5px solid #CFE5DA;overflow:hidden;}
   .check-row.row-rest{background:#FAFBFC;opacity:.85;}
+  /* 内勤によるシフト変更ボタン */
+  .day-edit-btn{margin-top:3px;padding:2px 8px;border-radius:99px;background:#EEF6FF;border:1.5px solid #BFD9F2;color:#3B7CB8;font-size:10.5px;font-weight:800;cursor:pointer;display:inline-block;}
+  .day-edit-btn:active{transform:scale(.95);}
   /* 出勤→お休みに変更された日：媒体側の入力作業が必要なので目立たせる */
   .check-row.row-to-rest{background:#FFFAF3;border-color:#FFCC80;}
   .check-row.row-to-rest .day-fixed{background:#FFF3E0;border-right-color:#FFCC80;}
@@ -1103,6 +1106,9 @@ const Store = (function(){
       case 'SET_USER': { state.currentUser = p.user; break; }
       case 'SET_STAFF_NAME': { state.currentStaffName = p.name; break; }
 
+      // ★ 内勤による直接変更（確定後も可・履歴とチェック解除つき）
+      case 'STAFF_CHANGE_SHIFT': return _staffChangeShift(p);
+
       case 'SET_SHIFT': {
         const wk = weekKeyOf(p.ds);
         const w = _ensureWeek(p.cast, wk);
@@ -1400,6 +1406,53 @@ const Store = (function(){
     w.changeRequest = null;
   }
 
+  /* ============================================================
+     ★ 内勤によるシフト直接変更（2026/08/04）
+     当日・翌日の急な変更に対応するため、内勤は確定後でも変更できる。
+     変更申請を受理したときと同じ扱いにする：
+       ・変更履歴に残す（誰がいつ、変更前→変更後）
+       ・その日の媒体チェックは全部外す（入力し直しが必要なため）
+     誰が変更したかは必ず記録されるので、後から追える。
+     ============================================================ */
+  function _staffChangeShift(p){
+    const wk = weekKeyOf(p.ds);
+    const w = _ensureWeek(p.cast, wk);
+    const before = w.shifts[p.ds] ? {start:w.shifts[p.ds].start, end:w.shifts[p.ds].end} : null;
+
+    if(p.type === 'holiday'){
+      delete w.shifts[p.ds];
+    }else{
+      const v = validateShift(p.ds, {start:p.start, end:p.end});
+      if(!v.ok) return {error:v.error};
+      w.shifts[p.ds] = {start:p.start, end:p.end, memo:(w.shifts[p.ds]&&w.shifts[p.ds].memo)||''};
+    }
+
+    // その日のチェックを外す（変更申請の受理と同じ）
+    const clearedMedia = [];
+    for(const ckey in w.checks){
+      if(ckey.indexOf(p.ds+'_')===0){
+        clearedMedia.push(ckey.slice(p.ds.length+1));
+        delete w.checks[ckey];
+      }
+    }
+
+    if(!w.changeHistory) w.changeHistory = {};
+    if(!w.changeHistory[p.ds]) w.changeHistory[p.ds] = [];
+    w.changeHistory[p.ds].push({
+      at: nowIso(),
+      by: p.by || state.currentStaffName || '内勤',
+      type: p.type === 'holiday' ? 'holiday' : 'time',
+      before: before,
+      after: p.type === 'holiday' ? null : {start:p.start, end:p.end},
+      reason: p.reason || '内勤による変更',
+      clearedMedia: clearedMedia,
+      byStaff: true                      // 内勤が直接変更した印
+    });
+
+    _touch(p.cast, wk, p.by || state.currentStaffName || '内勤');
+    return {ok:true, before:before, clearedMedia:clearedMedia};
+  }
+
   function canEditByStatus(status){
     // unsubmitted（未提出）・waiting（提出済みだが内勤未操作）は編集可能
     // ※確認通知を送った時点／変更申請を受理した時点で週はロックされる
@@ -1608,6 +1661,7 @@ function _auditDetail(a){
     case 'SUBMIT_WEEK': return 'シフトを提出';
     case 'CAST_SUBMIT': return 'シフトを提出';
     case 'CHECK_ON': return 'チェック';
+    case 'STAFF_EDIT': return '内勤が変更';
     case 'SAVE_FAILED': return '保存できず';
     case 'LOGIN': return 'ログイン';
     case 'CHECK_OFF': return 'チェック解除';
@@ -1806,6 +1860,7 @@ const StaffGas = {
         reject:          '🙏【変更申請 却下】',
         vacation_accepted:'🏖️【長期休暇 承認】',
         vacation_rejected:'🙏【長期休暇 却下】',
+        staff_change:    '🔄【シフト変更のお知らせ】',
       }[type] || '📢【お知らせ】';
       this._post({action:'sendEmail', toRole:'cast', toCast:castName,
         subject:subjTag+message,
@@ -2553,6 +2608,9 @@ const StaffApp = (function(){
               : '<div class="rest-cell">お休み</div>'
         }
         ${histIcon}
+        ${(!vacation && !vacReq)
+          ? `<div class="day-edit-btn" title="内勤がシフトを変更する" onclick="event.stopPropagation();StaffApp.openShiftEdit('${esc(c.name)}','${wk}','${ds}')">✏️ 変更</div>`
+          : ''}
         ${dayMemo?`<div class="day-memo-line">📝 ${esc(dayMemo)}</div>`:''}
       </div>`;
 
@@ -3281,6 +3339,112 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     clearTimeout(window._stT);window._stT=setTimeout(()=>t.classList.remove('show'),2400);
   }
 
+
+  /* ============================================================
+     ★ 内勤によるシフト変更（当日・翌日の急な変更用）
+     キャストにログインし直さなくても、この画面から直接変更できる。
+     変更するとキャストへ通知＋メールが届き、変更履歴にも残る。
+     ============================================================ */
+  function openShiftEdit(cast, wk, ds){
+    const ex=document.getElementById('shiftEditModal'); if(ex) ex.remove();
+    const w = Store.getWeek(cast, wk);
+    const sh = (w && w.shifts && w.shifts[ds]) || null;
+    const d = new Date(ds+'T12:00:00');
+    const dows=['日','月','火','水','木','金','土'];
+    const dateLabel = `${d.getMonth()+1}/${d.getDate()}(${dows[d.getDay()]})`;
+
+    // 時刻の選択肢（12〜28時／13〜29時）
+    const opt=(from,to,cur)=>{
+      let o='';
+      for(let h=from;h<=to;h++){
+        const lbl = h>=25 ? (h-24)+'(翌)' : String(h);
+        o += `<option value="${h}" ${cur===h?'selected':''}>${lbl}時</option>`;
+      }
+      return o;
+    };
+    const curS = sh ? sh.start : 18;
+    const curE = sh ? sh.end   : 24;
+
+    const m=document.createElement('div');
+    m.id='shiftEditModal';
+    m.style.cssText='position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    m.innerHTML=`
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.45)" id="seBg"></div>
+      <div style="position:relative;background:#fff;border-radius:20px;padding:20px;max-width:400px;width:100%;box-shadow:0 12px 48px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:16px;font-weight:800;color:var(--text)">✏️ シフトを変更</div>
+          <button id="seClose" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--text2)">✕</button>
+        </div>
+        <div style="font-size:14px;font-weight:800;color:var(--mint-deep);margin-bottom:14px">${esc(cast)}さん　${dateLabel}</div>
+
+        <div style="background:#F8FBF9;border:2px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+          <div style="font-size:11.5px;color:var(--text2);font-weight:800;margin-bottom:6px">現在</div>
+          <div style="font-size:15px;font-weight:800;color:var(--text)">${sh ? '⏰ '+fmtShift(sh.start,sh.end) : 'お休み'}</div>
+        </div>
+
+        <div style="font-size:11.5px;color:var(--text2);font-weight:800;margin-bottom:6px">変更後の出勤時間</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+          <select id="seStart" style="flex:1;padding:11px;border-radius:12px;border:2px solid var(--line);font-family:inherit;font-size:15px;background:#fff">${opt(12,28,curS)}</select>
+          <span style="font-weight:800;color:var(--text2)">〜</span>
+          <select id="seEnd" style="flex:1;padding:11px;border-radius:12px;border:2px solid var(--line);font-family:inherit;font-size:15px;background:#fff">${opt(13,29,curE)}</select>
+        </div>
+
+        <div style="font-size:11.5px;color:var(--text2);font-weight:800;margin-bottom:6px">理由（任意・キャストへの通知に入ります）</div>
+        <input id="seReason" type="text" placeholder="例：本人希望により変更" style="width:100%;padding:11px;border-radius:12px;border:2px solid var(--line);font-family:inherit;font-size:14px;background:#fff;margin-bottom:14px">
+
+        <div style="background:#FFF8FC;border:2px solid #FFE0EC;border-radius:12px;padding:11px 13px;font-size:12px;color:var(--text);line-height:1.7;margin-bottom:16px">
+          変更するとキャストへ<b>通知とメールが届きます</b>。<br>
+          この日の媒体チェックは<b>すべて外れます</b>（入力し直しが必要なため）。
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="seSave" style="flex:1;min-width:120px;padding:13px;border:none;border-radius:14px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">この時間に変更</button>
+          <button id="seRest" style="padding:13px 16px;border:2px solid #FFB9B9;border-radius:14px;background:#FFF5F5;color:#E05260;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit">お休みにする</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+    m.querySelector('#seClose').addEventListener('click',()=>m.remove());
+    m.querySelector('#seBg').addEventListener('click',()=>m.remove());
+    m.querySelector('#seSave').addEventListener('click',()=>_applyShiftEdit(cast,wk,ds,dateLabel,'time'));
+    m.querySelector('#seRest').addEventListener('click',()=>_applyShiftEdit(cast,wk,ds,dateLabel,'holiday'));
+  }
+
+  async function _applyShiftEdit(cast, wk, ds, dateLabel, type){
+    const m=document.getElementById('shiftEditModal');
+    const reason=(m.querySelector('#seReason').value||'').trim();
+    const start=+m.querySelector('#seStart').value;
+    const end=+m.querySelector('#seEnd').value;
+
+    if(type==='holiday'){
+      if(!confirm(`${cast}さんの ${dateLabel} を「お休み」に変更します。\n\nキャストへ通知が届きます。よろしいですか？`)) return;
+    }
+
+    const r = Store.dispatch('STAFF_CHANGE_SHIFT',{
+      cast, ds, type, start, end, reason, by: staffName
+    });
+    if(r && r.error){ toast(errorMessage(r.error)); return; }
+
+    m.remove();
+    renderCastList();
+    await autoSave();
+
+    // キャストへ通知＋メール
+    const beforeTxt = r.before ? fmtShift(r.before.start, r.before.end) : 'お休み';
+    const afterTxt  = (type==='holiday') ? 'お休み' : fmtShift(start, end);
+    const msg = `${dateLabel} のシフトが変更されました。<br>`
+      + `<b>${beforeTxt} → ${afterTxt}</b>`
+      + (reason ? `<br>理由：${esc(reason)}` : '')
+      + `<br><br>変更したスタッフ：${esc(staffName||'内勤')}`;
+    StaffGas.notify(cast, 'staff_change', msg).catch(()=>{});
+
+    // 操作ログ
+    StaffGas._post({action:'addLog', type:'STAFF_EDIT', cast, week:wk,
+      detail:`✏️ ${dateLabel} ${beforeTxt} → ${afterTxt}`+(reason?`（${reason}）`:''),
+      by: staffName||'内勤'}).catch(()=>{});
+
+    toast(`${dateLabel} を変更し、${cast}さんへ通知しました`);
+  }
+
   /* ② 内勤メモ保存 */
   async function saveStaffMemo(cast, wk, memo){
     const r = Store.dispatch('SET_STAFF_MEMO',{cast, wk, memo:(memo||'').trim()});
@@ -3786,7 +3950,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   return {
     init, setStaffName, jumpToCast, toggleCast, openLogs,
     toggleCheck, toggleDayAll, fillRemaining,
-    confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, showDayHistory,
+    confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, openShiftEdit, showDayHistory,
     acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,

@@ -3143,6 +3143,10 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
             <button class="log-filter-chip" data-lf="SHIFT_DEL" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">🗑️出勤消滅</button>
             <button class="log-filter-chip" data-lf="MERGE" style="padding:5px 11px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--text2);font-size:11px;font-weight:800;cursor:pointer">⚠️競合</button>
           </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)">
+            <span style="font-size:11px;font-weight:800;color:var(--text2)">👤 操作した人：</span>
+            <div id="logStaffChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          </div>
         </div>
         <div id="logsBody" style="padding:14px 20px;overflow-y:auto;flex:1">
           <div style="color:var(--text2);font-size:13px">読み込み中…</div>
@@ -3154,12 +3158,14 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
 
     let _allLogs=[];
     let _logFilter='all';
+    let _logStaff='all';   // 操作した人での絞り込み
     let _logSearch='';
 
     function renderLogs(){
       const body=modal.querySelector('#logsBody');
       let logs=_allLogs;
       if(_logFilter!=='all') logs=logs.filter(l=>l.type===_logFilter);
+      if(_logStaff!=='all') logs=logs.filter(l=>(l.by||'')===_logStaff);   // ★ 操作した人で絞る
       if(_logSearch) logs=logs.filter(l=>(l.cast||'').includes(_logSearch)||(l.by||'').includes(_logSearch));
       if(logs.length===0){ body.innerHTML='<div style="color:var(--text2);font-size:13px">該当するログはありません</div>'; return; }
       body.innerHTML='';
@@ -3203,7 +3209,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
         row.style.cssText='padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.5';
         const head=`<span style="color:var(--text2);font-size:11px">${dstr}</span> `
           +`<span style="display:inline-block;background:${tagColor};color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin:0 4px">${esc(label)}</span> `
-          +`<span style="font-weight:800;color:var(--mint-deep)">${esc(l.by||'?')}</span>`
+          +`<span style="font-weight:800;color:${staffColor(l.by)||'var(--mint-deep)'}">${esc(l.by||'?')}</span>`
           +(l.cast?` → <span style="font-weight:700">${esc(l.cast)}</span>`:'')
           +wkTxt
           +(n>1?` <span style="font-weight:800;color:${tagColor}">${n}件</span>`:'');
@@ -3242,6 +3248,30 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     }
 
     // 検索・フィルターのイベント
+    /* ★ 操作した人で絞り込むチップを作る
+       内勤の色をそのまま使うので、誰の操作かが視覚的にも分かる */
+    function renderStaffChips(){
+      const box=modal.querySelector('#logStaffChips');
+      if(!box) return;
+      const staff=Store.getStaffList();
+      const mk=(label,val,col)=>{
+        const on = (_logStaff===val);
+        const c = col || 'var(--text2)';
+        return `<button class="log-staff-chip" data-ls="${esc(val)}" style="padding:5px 11px;border-radius:99px;border:2px solid ${on?c:'var(--line)'};`
+          +`background:${on?c+'22':'#fff'};color:${on?c:'var(--text2)'};font-size:11px;font-weight:800;cursor:pointer">${esc(label)}</button>`;
+      };
+      let html = mk('すべて','all','#5FD0A0');
+      staff.forEach(st=>{ html += mk(st.name, st.name, st.color||'#5FD0A0'); });
+      // 名簿にいない人（退職者など）のログも拾えるようにする
+      const others = [...new Set(_allLogs.map(l=>l.by).filter(Boolean))]
+        .filter(n => !staff.some(st=>st.name===n));
+      others.forEach(n=>{ html += mk(n, n, '#B8C2CC'); });
+      box.innerHTML = html;
+      box.querySelectorAll('.log-staff-chip').forEach(b=>{
+        b.addEventListener('click',()=>{ _logStaff=b.dataset.ls; renderStaffChips(); renderLogs(); });
+      });
+    }
+
     modal.querySelector('#logHelpBtn').addEventListener('click',(ev)=>{ ev.stopPropagation(); openLogHelp(); });
     modal.querySelector('#logsSearch').addEventListener('input',(e)=>{ _logSearch=e.target.value.trim(); renderLogs(); });
     modal.querySelectorAll('.log-filter-chip').forEach(chip=>{
@@ -3260,6 +3290,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     try{
       const r=await StaffGas._get({action:'getLogs'});
       _allLogs=(r&&r.logs)||[];
+      renderStaffChips();
       renderLogs();
     }catch(e){
       modal.querySelector('#logsBody').innerHTML='<div style="color:#C62828;font-size:13px">ログの読み込みに失敗しました</div>';

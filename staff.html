@@ -2008,6 +2008,7 @@ const StaffApp = (function(){
   }
 
   function setStaffName(name){
+    setTimeout(applyStaffSelectColor, 0);   // 選択の反映後に色を更新
     staffName=name;
     Store.dispatch('SET_USER',{user:{type:role,name}});
     Store.dispatch('SET_STAFF_NAME',{name});
@@ -3472,6 +3473,17 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     toast(`${dateLabel} を変更し、${cast}さんへ通知しました`);
   }
 
+  /* 内勤選択欄の文字色を、その人の色に合わせる */
+  function applyStaffSelectColor(){
+    const sel=document.getElementById('staffSelect');
+    if(!sel) return;
+    const col = staffColor(sel.value) || '#5FD0A0';
+    sel.style.color = col;
+    sel.style.borderColor = col;
+    // 背景はごく薄く色を敷く（文字が読みづらくならない程度）
+    sel.style.background = col + '18';
+  }
+
   /* ② 内勤メモ保存 */
   async function saveStaffMemo(cast, wk, memo){
     const r = Store.dispatch('SET_STAFF_MEMO',{cast, wk, memo:(memo||'').trim()});
@@ -3977,6 +3989,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   return {
     init, setStaffName, jumpToCast, toggleCast, openLogs,
     toggleCheck, toggleDayAll, fillRemaining,
+    applyStaffSelectColor,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, openShiftEdit, showDayHistory,
     acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
@@ -4048,8 +4061,13 @@ KANA_GROUPS.forEach(g=>{
   const sel=document.getElementById('staffSelect');
   const staff=Store.getStaffList();
   if(sel){
-    sel.innerHTML=staff.map(s=>`<option value="${s.name}" ${s.name===nameFromUrl?'selected':''}>${s.name}</option>`).join('')||'<option>内勤</option>';
+    /* ★ チェック表で使う内勤ごとの色を、この選択欄にも反映する
+       （誰として操作しているかが一目で分かるように） */
+    sel.innerHTML=staff.map(s=>
+      `<option value="${s.name}" style="color:${s.color||'#5FD0A0'};font-weight:800" ${s.name===nameFromUrl?'selected':''}>${s.name}</option>`
+    ).join('')||'<option>内勤</option>';
     if(nameFromUrl) StaffApp.setStaffName(nameFromUrl);
+    StaffApp.applyStaffSelectColor();
   }
 
   // ログアウトボタン

@@ -3260,12 +3260,9 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
         return `<button class="log-staff-chip" data-ls="${esc(val)}" style="padding:5px 11px;border-radius:99px;border:2px solid ${on?c:'var(--line)'};`
           +`background:${on?c+'22':'#fff'};color:${on?c:'var(--text2)'};font-size:11px;font-weight:800;cursor:pointer">${esc(label)}</button>`;
       };
+      // ★ 内勤スタッフのみを並べる（キャストの操作は絞り込み対象にしない）
       let html = mk('すべて','all','#5FD0A0');
       staff.forEach(st=>{ html += mk(st.name, st.name, st.color||'#5FD0A0'); });
-      // 名簿にいない人（退職者など）のログも拾えるようにする
-      const others = [...new Set(_allLogs.map(l=>l.by).filter(Boolean))]
-        .filter(n => !staff.some(st=>st.name===n));
-      others.forEach(n=>{ html += mk(n, n, '#B8C2CC'); });
       box.innerHTML = html;
       box.querySelectorAll('.log-staff-chip').forEach(b=>{
         b.addEventListener('click',()=>{ _logStaff=b.dataset.ls; renderStaffChips(); renderLogs(); });

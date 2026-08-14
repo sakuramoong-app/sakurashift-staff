@@ -1778,6 +1778,22 @@ const StaffGas = {
       return true;
     }catch(e){ console.warn('月読込エラー',e); return false; }
   },
+  /* ★ まとめて取得（2026/08/14）
+     以前は マスタ／月データ／全週／メモ／通知／募集情報 を
+     別々に5〜7回通信していた。GASは1回ごとに起動と往復の待ちが入るため、
+     処理が速くても回数が多いと体感が遅く、同時アクセスの上限にも当たりやすい。
+     1回で全部受け取ることで待ち時間を大きく減らす。 */
+  async bootstrap(viewYM){
+    const weeks = weeksInMonth(viewYM);
+    const d = new Date(); d.setDate(d.getDate()-42);
+    const sinceWk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const r = await this._get({action:'bootstrap', weeks:weeks.join(','), sinceWk});
+    if(!r || r.error) throw new Error((r && r.error) || 'BOOTSTRAP_FAILED');
+    if(r.master) Store.dispatch('LOAD_MASTER', r.master);
+    if(r.weeks)  Store.dispatch('LOAD_WEEKS', {weeks:r.weeks});
+    return r;
+  },
+
   async loadAllWeeks(){
     try{
       /* ★ 軽量化：直近6週間ぶんだけ読む（未来の週は常に含まれる）
@@ -1933,12 +1949,13 @@ const StaffApp = (function(){
        以前は「画面表示に必要な今月分」と「受信ボックス用の全期間」が
        両方そろうまで画面を出さなかったため、遅い方に引きずられていた。
        画面に必要なものだけ待って先に表示し、受信ボックスは後から埋める。 */
+    /* ★ 1回の通信で必要なものを全部受け取る（2026/08/14）
+       月データ・全週・メモ・通知・募集情報がまとめて返るので、
+       受信ボックスを後追いで読む必要もなくなった。 */
     try{
-      await Promise.all([
-        StaffGas.loadMaster(),
-        StaffGas.loadMonthAll(viewYM),   // 表示中の月だけ＝軽い
-      ]);
-    }catch(e){ /* 個別のcatchで握るが念のため */ }
+      const boot = await StaffGas.bootstrap(viewYM);
+      if(boot && boot.notes) _staffNotes = boot.notes;
+    }catch(e){ console.warn('初期読み込みエラー', e); }
 
     // マスタが読めなかった場合は再試行案内を表示
     const castList = Store.getCastList();
@@ -1950,10 +1967,7 @@ const StaffApp = (function(){
     Store.dispatch('SET_USER',{user:{type:role,name:staffName}});
     Store.dispatch('SET_STAFF_NAME',{name:staffName});
     setBusy(false);
-    renderAll();          // ← ここでもう操作できる
-
-    // 受信ボックス用のデータは裏で読み込み、届いたら表示を更新する
-    _loadInboxInBackground();
+    renderAll();
   }
 
   // 受信ボックスを後追いで読み込む（画面の操作は止めない）

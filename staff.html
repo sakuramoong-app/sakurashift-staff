@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>サクラシフト 内勤</title>
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#5FD0A0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="サクラシフト 内勤">
 <style>
   :root{
     --base:#F0FBF4;--card:#FFFFFF;--mint:#A7E8C8;--mint-deep:#5FD0A0;
@@ -1464,6 +1471,15 @@ const Store = (function(){
 
   function getDirtyKeys(){ return [...dirty]; }
 
+  /* ★ 保存が終わった時点で、送った内容と画面の内容が同じかを確かめる。
+     送信中にチェックを押していた場合は違うので、未保存のままにして次で保存する。 */
+  function isSameAsCurrent(cast, wk, sentData){
+    try{
+      const live = getWeek(cast, wk);
+      return JSON.stringify(live) === JSON.stringify(sentData);
+    }catch(e){ return false; }
+  }
+
   /* ============================================================
      ★ 3-wayマージ
      base（読込時点）・local（自分の変更後）・server（サーバー最新）を比較し、
@@ -1529,9 +1545,18 @@ const Store = (function(){
     state.weeks[cast][wk] = _cleanupWeek(data);
     setBaseSnapshot(cast, wk, data);
   }
+  /* ★ 送信する内容は「その時点のコピー」を返す（2026/08/14 修正）
+     以前は画面のデータをそのまま返していたため、
+     送信している最中にチェックを押すと送信内容も一緒に変わってしまい、
+     「送ったつもりの内容」と「実際に送られた内容」がズレていた。
+     その結果、保存されていないチェックが保存済み扱いになり、
+     次の保存で復活したり消えたりしていた。 */
   function getDirtyWeek(key){
     const [cast,wk] = key.split('|');
-    return { cast, wk, data: getWeek(cast,wk) };
+    const live = getWeek(cast,wk);
+    let snap = live;
+    try{ snap = live ? JSON.parse(JSON.stringify(live)) : live; }catch(e){}
+    return { cast, wk, data: snap };
   }
 
   function getAuditQueue(){ return [...auditQueue]; }
@@ -1560,7 +1585,7 @@ const Store = (function(){
     dispatch, subscribe,
     getWeek, getWeekOrEmpty, getCastWeeks, getState,
     getDirtyKeys, getDirtyWeek,
-    getBaseSnapshot, setBaseSnapshot, mergeWeek3, applyMergedWeek,
+    getBaseSnapshot, setBaseSnapshot, mergeWeek3, applyMergedWeek, isSameAsCurrent,
     getAuditQueue, clearAuditQueue,
     getCastList, getStaffList, getCastStores, getCastAlias, getCastAliases, getSettings,
     isMasterDirty, clearMasterDirty, getMaster,
@@ -1867,6 +1892,11 @@ const StaffGas = {
           }
         }else if(resp && resp.success){
           Store.setBaseSnapshot(cast, wk, data);   // ★ 保存できた内容を新しい基準にする
+          // ★ 送信中にチェックが増えていたら未保存のまま残す（取りこぼし防止）
+          if(!Store.isSameAsCurrent(cast, wk, data)){
+            console.info('[save] 送信中に変更あり。次の保存に持ち越します', cast, wk);
+            continue;
+          }
           _flushPendingLogs(this._post.bind(this));   // ★ 通信が回復したので失敗記録を送る
           Store.dispatch('CLEAR_DIRTY',{key});
           if(_entries.length){

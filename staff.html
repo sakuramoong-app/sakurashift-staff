@@ -143,6 +143,11 @@
   .check-rows{display:flex;flex-direction:column;gap:3px;}
   .check-row{display:flex;gap:0;background:#fff;border-radius:10px;border:1.5px solid #CFE5DA;overflow:hidden;}
   .check-row.row-rest{background:#FAFBFC;opacity:.85;}
+  /* ★ 未提出の週：チェック欄に斜線を敷いて「まだ触らない」と分かるようにする */
+  .check-row.row-unsubmitted .store-area{
+    background:repeating-linear-gradient(45deg,#F7F8FA,#F7F8FA 7px,#ECEFF3 7px,#ECEFF3 14px);
+  }
+  .check-row.row-unsubmitted .store-area .chip{opacity:.5;}
   /* 内勤によるシフト変更ボタン */
   .day-edit-btn{margin-top:3px;padding:2px 8px;border-radius:99px;background:#EEF6FF;border:1.5px solid #BFD9F2;color:#3B7CB8;font-size:10.5px;font-weight:800;cursor:pointer;display:inline-block;}
   .day-edit-btn:active{transform:scale(.95);}
@@ -1705,6 +1710,7 @@ function _auditDetail(a){
     case 'CAST_SUBMIT': return 'シフトを提出';
     case 'CHECK_ON': return 'チェック';
     case 'STAFF_EDIT': return '内勤が変更';
+    case 'SUBMIT_ASK': return '提出の確認';
     case 'SAVE_FAILED': return '保存できず';
     case 'LOGIN': return 'ログイン';
     case 'CHECK_OFF': return 'チェック解除';
@@ -1965,6 +1971,7 @@ const StaffGas = {
         vacation_accepted:'🏖️【長期休暇 承認】',
         vacation_rejected:'🙏【長期休暇 却下】',
         staff_change:    '🔄【シフト変更のお知らせ】',
+        submit_ask:      '📝【シフト提出のご確認】',
       }[type] || '📢【お知らせ】';
       this._post({action:'sendEmail', toRole:'cast', toCast:castName,
         subject:subjTag+message,
@@ -2761,7 +2768,9 @@ const StaffApp = (function(){
         storeCells=`<div class="store-grid2"><div class="store-row">${row1}</div><div class="store-row">${row2}</div></div>`;
       }
 
-      rows+=`<div class="check-row ${isRest&&!toRest?'row-rest':''} ${toRest?'row-to-rest':''} ${isRest&&!toRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''}" data-ds="${ds}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
+      // ★ 未提出の週は、誤って入力しないようチェック欄を斜線で示す
+      const _unsub = (w && w.status==='unsubmitted');
+      rows+=`<div class="check-row ${isRest&&!toRest?'row-rest':''} ${toRest?'row-to-rest':''} ${isRest&&!toRest&&hideRest?'row-hidden':''} ${isPast?'past-day':''} ${_unsub?'row-unsubmitted':''}" data-ds="${ds}">${dateCell}${bulkCell}<div class="store-area">${storeCells}</div></div>`;
     });
 
     const isCurrentWeek = wk===currentWeekKey();
@@ -2799,6 +2808,10 @@ const StaffApp = (function(){
 
   /* ============ 操作 ============ */
   // ★ チェック可否ガード：まだ確認済み通知を送っていない週（waiting）はチェック不可
+  /* ★ 未提出の週で「このまま入力する」を選んだ記録
+     一度選んだ週では、以降その確認を出さない（毎回聞かれると邪魔なため） */
+  const _unsubmitOk = {};
+
   function _canCheckWeek(cast, wk){
     const w=Store.getWeek(cast,wk);
     if(!w) return true;
@@ -2807,7 +2820,60 @@ const StaffApp = (function(){
       _showCheckLockWarning();
       return false;
     }
+    /* ★ 未提出の週（2026/10/04 追加）
+       キャストが提出ボタンを押していない状態。
+       　・押し忘れ
+       　・まだ予定が決まらず、あえて出していない
+       のどちらもあり得るため、内勤が入力すると本人の予定を
+       上書きしてしまう恐れがある。
+       入力そのものは止めず、一度だけ確認を挟む。 */
+    if(w.status==='unsubmitted' && !_unsubmitOk[cast+'|'+wk]){
+      _showUnsubmittedWarning(cast, wk);
+      return false;
+    }
     return true;
+  }
+
+  // 未提出の週にチェックしようとしたときの確認
+  function _showUnsubmittedWarning(cast, wk){
+    if(document.getElementById('unsubmitModal')) return;
+    const m=document.createElement('div');
+    m.id='unsubmitModal';
+    m.style.cssText='position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    m.innerHTML=`
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.45)" id="usBg"></div>
+      <div style="position:relative;background:#fff;border-radius:20px;padding:22px;max-width:400px;width:100%;box-shadow:0 12px 48px rgba(0,0,0,.2);text-align:center">
+        <div style="font-size:40px;margin-bottom:8px">📝</div>
+        <div style="font-size:17px;font-weight:900;color:#E9A23B;margin-bottom:12px">まだ提出されていません</div>
+        <div style="font-size:13.5px;color:var(--text);line-height:1.8;margin-bottom:18px">
+          <b>${esc(cast)}さん</b>はまだ提出ボタンを押していません。<br>
+          入力の途中で、これから内容が変わる可能性があります。
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button id="usAsk" style="padding:13px;border:none;border-radius:13px;background:linear-gradient(135deg,var(--mint),var(--mint-deep));color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;font-family:inherit">💬 本人に確認する</button>
+          <button id="usGo" style="padding:12px;border:2px solid var(--line);border-radius:13px;background:#fff;color:var(--text2);font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit">このまま入力する</button>
+          <button id="usClose" style="padding:10px;border:none;background:none;color:var(--text2);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit">閉じる</button>
+        </div>
+      </div>`;
+    document.body.appendChild(m);
+    const close=()=>m.remove();
+    m.querySelector('#usBg').addEventListener('click',close);
+    m.querySelector('#usClose').addEventListener('click',close);
+    m.querySelector('#usGo').addEventListener('click',()=>{
+      _unsubmitOk[cast+'|'+wk]=true;   // この週は以降確認しない
+      close();
+      toast('この週はこのまま入力できます');
+    });
+    m.querySelector('#usAsk').addEventListener('click',async ()=>{
+      close();
+      const msg='シフトの提出についての確認です。まだ提出ボタンが押されていないようです。'
+        +'入力中でしたら、終わりましたら「提出する」を押してください。'
+        +'提出済みのつもりでしたら、お手数ですがご連絡ください。';
+      await StaffGas.notify(cast, 'submit_ask', msg).catch(()=>{});
+      StaffGas._post({action:'addLog', type:'SUBMIT_ASK', cast, week:wk,
+        detail:'提出について本人に確認', by:staffName||'内勤'}).catch(()=>{});
+      toast(`${cast}さんへ確認の連絡を送りました`);
+    });
   }
   function _showCheckLockWarning(){
     const existing=document.getElementById('checkLockModal');

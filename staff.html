@@ -318,6 +318,9 @@
   .hc-unsub-chips{display:flex;flex-wrap:wrap;gap:7px;}
   .hc-unsub-chip{display:inline-flex;align-items:center;gap:4px;background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:800;color:#E65100;cursor:pointer;}
   .hc-unsub-chip input{margin:0;cursor:pointer;}
+  /* 名前を押すと3週分のシフトが見られることを示す */
+  .hc-unsub-name{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;}
+  .hc-unsub-name:active{opacity:.6;}
   .hc-unsub-chip.reminded{background:#E8F5E9;border-color:#A5D6A7;color:#2E7D32;}
   /* 長期休暇アコーディオン */
   .hc-vac-acc{margin-top:16px;border:2px solid var(--mint-line);border-radius:14px;padding:12px 16px;background:var(--mint-soft);}
@@ -3671,6 +3674,88 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     sel.style.background = col + '18';
   }
 
+
+  /* ============================================================
+     ★ キャストの3週分シフト表示（2026/10/04 追加）
+     未提出リストの名前を押すと、今日を基準に
+     前週・今週・来週のシフトをまとめて確認できる。
+     催促する前に「どこまで入力されているか」を見たい場面が多いため。
+     ============================================================ */
+  function openCast3Weeks(cast){
+    const ex=document.getElementById('cast3wModal'); if(ex) ex.remove();
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayDs = ymd(today);
+    const thisWk = weekKeyOf(todayDs);
+    const mk = (base, offset)=>{
+      const d = new Date(base+'T12:00:00');
+      d.setDate(d.getDate() + offset*7);
+      return ymd(d);
+    };
+    const wks = [
+      { wk: mk(thisWk,-1), label:'前の週' },
+      { wk: thisWk,        label:'今週'   },
+      { wk: mk(thisWk, 1), label:'来週'   },
+    ];
+
+    const dows=['月','火','水','木','金','土','日'];
+    const blocks = wks.map(x=>{
+      const w = Store.getWeek(cast, x.wk);
+      const st = w ? (w.status||'unsubmitted') : 'unsubmitted';
+      const stLabel = statusLabel(st);
+      const stColor = (st==='confirmed'||st==='change_confirmed') ? '#2E7D32'
+                    : (st==='unsubmitted') ? '#E65100'
+                    : (st==='waiting'||st==='input_waiting') ? '#E9A23B' : '#3B7CB8';
+      const stBg    = (st==='confirmed'||st==='change_confirmed') ? '#E8F5E9'
+                    : (st==='unsubmitted') ? '#FFF3E0'
+                    : (st==='waiting'||st==='input_waiting') ? '#FFF8E1' : '#E8F4FF';
+
+      const rows = weekDates(x.wk).map(ds=>{
+        const d = new Date(ds+'T12:00:00');
+        const dow = dows[(d.getDay()+6)%7];
+        const isToday = (ds===todayDs);
+        const vac = getVacationForCast(cast, ds);
+        const sh = (w && w.shifts && w.shifts[ds]) || null;
+        let body, color='var(--text2)';
+        if(vac){ body='🏖️ 長期休暇'; }
+        else if(sh && sh.start!=null){ body='⏰ '+fmtShift(sh.start, sh.end); color='var(--text)'; }
+        else { body='— お休み —'; }
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--line);
+                  ${isToday?'background:#FFFDF2;':''}">
+          <span style="width:74px;font-size:12.5px;font-weight:800;color:${isToday?'#E9A23B':'var(--text2)'}">
+            ${d.getMonth()+1}/${d.getDate()}(${dow})${isToday?' ●':''}
+          </span>
+          <span style="flex:1;font-size:13px;font-weight:${sh?'800':'600'};color:${color}">${body}</span>
+        </div>`;
+      }).join('');
+
+      return `<div style="margin-bottom:14px;border:2px solid var(--line);border-radius:14px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#F8FBF9">
+          <span style="font-size:13px;font-weight:900;color:var(--text)">${x.label}　<span style="font-size:11.5px;color:var(--text2);font-weight:700">${esc(_wkShortRange(x.wk))}</span></span>
+          <span style="font-size:11px;font-weight:800;color:${stColor};background:${stBg};border-radius:99px;padding:2px 10px">${esc(stLabel)}</span>
+        </div>
+        ${rows}
+      </div>`;
+    }).join('');
+
+    const m=document.createElement('div');
+    m.id='cast3wModal';
+    m.style.cssText='position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    m.innerHTML=`
+      <div style="position:absolute;inset:0;background:rgba(0,0,0,.45)" id="c3Bg"></div>
+      <div style="position:relative;background:#fff;border-radius:20px;padding:18px;max-width:460px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 48px rgba(0,0,0,.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:16px;font-weight:900;color:var(--text)">📅 ${esc(cast)}さんのシフト</div>
+          <button id="c3Close" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--text2)">✕</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--text2);font-weight:700;margin-bottom:14px">前の週・今週・来週（●が今日）</div>
+        ${blocks}
+      </div>`;
+    document.body.appendChild(m);
+    m.querySelector('#c3Close').addEventListener('click',()=>m.remove());
+    m.querySelector('#c3Bg').addEventListener('click',()=>m.remove());
+  }
+
   /* ② 内勤メモ保存 */
   async function saveStaffMemo(cast, wk, memo){
     const r = Store.dispatch('SET_STAFF_MEMO',{cast, wk, memo:(memo||'').trim()});
@@ -3840,9 +3925,12 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
             const d = new Date(last+'T12:00:00');
             vacTag = `<span class="hc-unsub-vac">🏖️${d.getMonth()+1}/${d.getDate()}まで休暇</span>`;
           }
+          /* ★ 名前を押すと前週・今週・来週のシフトを確認できる（2026/10/04）
+             催促する前に「どこまで入っているか」を見たい場面が多いため。
+             チェックボックスは催促済みの印なので、そのまま残す。 */
           return `<label class="hc-unsub-chip ${reminded?'reminded':''}">
             <input type="checkbox" ${reminded?'checked':''} onchange="StaffApp.toggleRemind('${wk}','${esc(c.name)}',this.checked)">
-            ${esc(c.name)}${reminded?' ✓':''}${vacTag}
+            <span class="hc-unsub-name" onclick="event.preventDefault();event.stopPropagation();StaffApp.openCast3Weeks('${esc(c.name)}')">${esc(c.name)}${reminded?' ✓':''}</span>${vacTag}
           </label>`;
         }).join('')}</div>`;
 
@@ -4176,7 +4264,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   return {
     init, setStaffName, jumpToCast, toggleCast, openLogs,
     toggleCheck, toggleDayAll, fillRemaining,
-    applyStaffSelectColor,
+    applyStaffSelectColor, openCast3Weeks,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, openShiftEdit, showDayHistory,
     acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,

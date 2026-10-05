@@ -3472,6 +3472,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   }
 
   async function sync(){
+    _hcLoadedAt = 0;   // ★ 手動更新なので、人数確認も読み直す
     setBusy(true,'最新を読み込み中…');
     await Promise.all([
       StaffGas.loadMonthAll(viewYM),
@@ -3804,13 +3805,31 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     });
   }
 
-  async function initHeadcount(){
+  /* ★ 人数確認の読み込み（2026/10/05 修正）
+     以前は開くたびに「全キャストの直近6週分」（約1MB）を毎回読み直していた。
+     画面を行き来するだけで何度も発生し、待ち時間の大きな原因になっていた。
+     一度読んだら90秒は使い回す。
+     最新にしたいときは 🔄同期ボタンを押せば読み直される。 */
+  let _hcLoadedAt = 0;
+  const _HC_FRESH_MS = 90 * 1000;
+
+  async function initHeadcount(force){
     const wks = _targetWks();
+    const fresh = (Date.now() - _hcLoadedAt) < _HC_FRESH_MS;
+    if(!force && fresh){
+      renderHeadcount();      // 直前に読んでいるのでそのまま表示
+      return;
+    }
     setBusy(true,'人数データを読み込み中…');
-    await Promise.all([
-      StaffGas.loadAllWeeks(),   // 全週データ（vacationsを確実に含む）
-      (async()=>{ _staffNotes = await StaffGas.loadStaffNotes(wks); })(),
-    ]);
+    try{
+      await Promise.all([
+        StaffGas.loadAllWeeks(),   // 全週データ（vacationsを確実に含む）
+        (async()=>{ _staffNotes = await StaffGas.loadStaffNotes(wks); })(),
+      ]);
+      _hcLoadedAt = Date.now();
+    }catch(e){
+      console.warn('人数データの読み込みに失敗', e);
+    }
     setBusy(false);
     renderHeadcount();
   }

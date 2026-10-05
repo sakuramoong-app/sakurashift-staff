@@ -1820,7 +1820,10 @@ const StaffGas = {
        そのときは従来どおり別途読み込む（画面が開かなくなるのを防ぐ）。 */
   async bootstrap(viewYM){
     const weeks = weeksInMonth(viewYM);
-    const r = await this._get({action:'bootstrap', weeks:weeks.join(',')});
+    // 受信ボックス用に、直近6週間ぶんの状態もまとめて受け取る
+    const d = new Date(); d.setDate(d.getDate()-42);
+    const sinceWk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const r = await this._get({action:'bootstrap', weeks:weeks.join(','), sinceWk});
     if(!r || r.error) throw new Error((r && r.error) || 'BOOTSTRAP_FAILED');
     if(r.master) Store.dispatch('LOAD_MASTER', r.master);
     if(r.weeks)  Store.dispatch('LOAD_WEEKS', {weeks:r.weeks});
@@ -2034,6 +2037,7 @@ const StaffApp = (function(){
       try{
         const boot = await StaffGas.bootstrap(viewYM);
         if(boot && boot.notes) _staffNotes = boot.notes;
+        if(boot && boot.inbox) _inboxLite = boot.inbox;   // ★ 受信ボックス用（軽量）
       }catch(err){
         console.warn('まとめて取得に失敗。従来の方法で読み込みます', err);
         await Promise.all([
@@ -2053,10 +2057,9 @@ const StaffApp = (function(){
     Store.dispatch('SET_USER',{user:{type:role,name:staffName}});
     Store.dispatch('SET_STAFF_NAME',{name:staffName});
     setBusy(false);
-    renderAll();          // ← ここでもう操作できる
-
-    // 受信ボックス用のデータは裏で読み込み、届いたら表示を更新する
-    _loadInboxInBackground();
+    renderAll();
+    /* ★ 受信ボックス用のデータは bootstrap に含まれているので、
+       ここで追加の読み込みはしない（通信が1回減る） */
   }
 
   // 受信ボックスを後追いで読み込む（画面の操作は止めない）
@@ -2118,12 +2121,23 @@ const StaffApp = (function(){
   }
 
   /* ============ 受信ボックス ============ */
+  /* ★ 受信ボックス用の軽量データ（2026/10/05）
+     bootstrap がまとめて返す「受信ボックスに出る週だけ・必要な項目だけ」。
+     シフトの時刻などは含まれないので、
+     週データ本体（state.weeks）とは必ず分けて持つ。
+     混ぜると、過去週の自動確定などが欠けたデータで動いて
+     シフトを壊す恐れがあるため。 */
+  let _inboxLite = {};
+
   function collectInbox(){
     const inbox=[];
     const _inboxToday=ymd(new Date());
     Store.getCastList().forEach(c=>{
       const castItems = [];
-      const castWeeks = Store.getCastWeeks(c.name);
+      // 本体データを優先し、足りない週だけ軽量データで補う
+      const full = Store.getCastWeeks(c.name) || {};
+      const lite = _inboxLite[c.name] || {};
+      const castWeeks = Object.assign({}, lite, full);
       const allWks = Object.keys(castWeeks).sort();
       const vacReqs = [];
       allWks.forEach(wk=>{
@@ -2135,7 +2149,8 @@ const StaffApp = (function(){
         }
         // 提出：シフトが全て今日より前なら受信ボックスに出さない
         if(w.status==='waiting'){
-          const shiftDates=Object.keys(w.shifts||{});
+          // 軽量データは shiftDates（日付だけ）、本体は shifts を持つ
+          const shiftDates = w.shiftDates ? w.shiftDates : Object.keys(w.shifts||{});
           const allPast=shiftDates.length>0&&shiftDates.every(ds=>ds<_inboxToday);
           if(!allPast) castItems.push({cast:c.name,wk,type:'submit',status:w.status,sortKey:wk});
         } else if(w.status==='change_requested'){

@@ -3715,6 +3715,14 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     ];
 
     const dows=['月','火','水','木','金','土','日'];
+    /* ★ 長期休暇の判定
+       同名の関数が renderHeadcount の中にもあるが、
+       あちらはその関数の内側でしか使えないため、ここに同じものを置く。
+       （中身は「その日が長期休暇かどうか」を返すだけ） */
+    const vacOf = (castName, ds)=>{
+      const w = Store.getWeek(castName, weekKeyOf(ds));
+      return (w && w.vacations && w.vacations[ds]) || null;
+    };
     const blocks = wks.map(x=>{
       const w = Store.getWeek(cast, x.wk);
       const st = w ? (w.status||'unsubmitted') : 'unsubmitted';
@@ -3730,7 +3738,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
         const d = new Date(ds+'T12:00:00');
         const dow = dows[(d.getDay()+6)%7];
         const isToday = (ds===todayDs);
-        const vac = getVacationForCast(cast, ds);
+        const vac = vacOf(cast, ds);
         const sh = (w && w.shifts && w.shifts[ds]) || null;
         let body, color='var(--text2)';
         if(vac){ body='🏖️ 長期休暇'; }

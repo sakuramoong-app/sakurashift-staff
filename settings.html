@@ -102,6 +102,8 @@
   .min-people-unit{font-size:12px;color:var(--text2);font-weight:700;}
   .min-people-desc{font-size:12px;color:var(--text);background:#F0FBF4;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.7;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shift_db.js"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -1105,20 +1107,12 @@ const Store = (function(){
    ============================================================ */
 
 const MasterGas = {
+  // ★ 2026/10 Supabase に引っ越し：GAS ではなく Supabase を直接読み書きする（shift_db.js）
   async _get(params){
-    const sess = sessionStorage.getItem('staffSession') || '';
-    const p = Object.assign({token:CONFIG.TOKEN, session:sess, _t:Date.now()}, params);
-    const qs = new URLSearchParams(p).toString();
-    const res = await fetch(CONFIG.GAS_URL + '?' + qs);
-    return res.json();
+    return ShiftDB.call(params);
   },
   async _post(params){
-    const body = new FormData();
-    for(const k in params) body.append(k, params[k]);
-    body.append('token', CONFIG.TOKEN);
-    body.append('session', sessionStorage.getItem('staffSession') || '');
-    const res = await fetch(CONFIG.GAS_URL, {method:'POST', body});
-    return res.json();
+    return ShiftDB.call(params);
   },
   /* ★ 読み込みに失敗したことを必ず呼び出し元へ伝える。
      以前は失敗しても静かに空のまま進み、画面には「まだキャストがいません」と出た。
@@ -1739,13 +1733,7 @@ document.getElementById('resetBtn').addEventListener('click', async ()=>{
   const result = document.getElementById('resetResult');
   if(result) result.textContent = '削除中…';
   try{
-    const body = new FormData();
-    body.append('token', CONFIG.TOKEN);
-    body.append('session', sessionStorage.getItem('staffSession') || '');
-    body.append('action', 'resetData');
-    body.append('target', target);
-    const res = await fetch(CONFIG.GAS_URL, {method:'POST', body});
-    const r = await res.json();
+    const r = await MasterGas._post({action:'resetData', target});
     if(r.success){
       if(result) result.textContent = `✅ 削除完了（${r.deleted}件削除しました）`;
       SettingsApp.toast(`${label}を削除しました🗑`);

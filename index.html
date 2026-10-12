@@ -33,6 +33,8 @@
   @keyframes spin{to{transform:rotate(360deg);}}
   .spinner{display:inline-block;width:14px;height:14px;border:2px solid #D9F0E5;border-top-color:var(--mint-deep);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shift_db.js"></script>
 </head>
 <body>
 <div class="card">
@@ -80,14 +82,17 @@ function go(s){
   location.replace('staff.html?name='+encodeURIComponent(s.name));
 }
 
+/* ★ 2026/10 Supabase に引っ越し
+   ポータルと同じ場所（sakuramoong-app.github.io）にあるので、ポータルのログインをそのまま使う。
+   通行証（#portalSso=…）はもう使わない（読んだら捨てる）。担当者の名前だけ受け取る。 */
 (async()=>{
-  let ssoToken='', operator='';
-  if(location.hash.indexOf('portalSso=')>=0){
+  let operator='';
+  if(location.hash.indexOf('portalSso=')>=0 || location.hash.indexOf('operator=')>=0){
     const hp=new URLSearchParams(location.hash.slice(1));
-    ssoToken=hp.get('portalSso')||'';
     operator=hp.get('operator')||'';
     history.replaceState(null,'',location.pathname+location.search);
   }
+  if(!operator){ try{ operator=localStorage.getItem('currentOperator')||''; }catch(e){} }
 
   // ログアウト・期限切れで戻ってきたときの案内
   const q=new URLSearchParams(location.search);
@@ -95,28 +100,19 @@ function go(s){
     ? 'ポータルでログインしてから20時間たったので、ログアウトしました。ポータルから開き直してください'
     : '';
 
-  // すでに入っている（同じ担当者）ならそのまま開く
+  // ポータルでログインしていて（20時間以内）、担当者が分かればそのまま開く
+  const sbs=await ShiftDB.getSession();
+  if(!sbs){
+    try{ localStorage.removeItem(PORTAL_KEY); }catch(e){}
+    showPortalOnly(reason);
+    return;
+  }
   const saved=loadPortalSession();
-  if(saved && (!operator || saved.name===operator)){ go(saved); return; }
-
-  if(!ssoToken || !operator){ showPortalOnly(reason); return; }
-
-  try{
-    // トークンはURLに載せず本文で送る（x-www-form-urlencodedならGAS側は e.parameter で読める）
-    // ※ 通行証は1回しか使えないので、失敗しても送り直さない
-    const res=await fetch(GAS_URL,{method:'POST',body:new URLSearchParams({action:'ssoLogin',token:TOKEN,ssoToken,operator})});
-    const text=await res.text();
-    if(text.trim().startsWith('<')) throw new Error('GAS_HTML_ERROR');
-    const data=JSON.parse(text);
-    if(data.success && data.session){
-      const s={session:data.session, name:data.name||operator,
-               expiresAt:Number(data.expiresAt)||(Date.now()+17*60*60*1000)};
-      localStorage.setItem(PORTAL_KEY,JSON.stringify(s));
-      go(s);
-      return;
-    }
-  }catch(e){}
-  showPortalOnly('入れませんでした。ポータルからもう一度開いてください');
+  const name=operator || (saved && saved.name) || '';
+  if(!name){ showPortalOnly('担当者が分かりません。ポータルで担当者を選んでから開いてください'); return; }
+  const s={session:'supabase', name, expiresAt:ShiftDB.sessionExpiresAt(sbs)};
+  localStorage.setItem(PORTAL_KEY,JSON.stringify(s));
+  go(s);
 })();
 </script>
 </body>

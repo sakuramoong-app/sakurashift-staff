@@ -383,6 +383,8 @@
   .hvc-add-btn:active{transform:scale(.95);}
   .hvc-none-day{font-size:12px;color:#C8CDD2;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shift_db.js"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -1778,24 +1780,26 @@ const StaffGas = {
     }
     throw lastErr;
   },
+  /* ★ 2026/10 Supabase に引っ越し：GAS ではなく Supabase を直接読み書きする（shift_db.js）
+     action 名と返事の形は GAS のときと同じ。通信が切れたときだけ少し待って送り直す。 */
+  async _db(params, maxRetries){
+    let lastErr;
+    for(let attempt=0; attempt<=maxRetries; attempt++){
+      try{ return await ShiftDB.call(params); }
+      catch(e){
+        lastErr = e;
+        if(attempt < maxRetries) await new Promise(r=>setTimeout(r, 800*(attempt+1)));
+      }
+    }
+    throw lastErr;
+  },
   async _get(params){
-    const sess = sessionStorage.getItem('staffSession') || '';
-    const p = Object.assign({token:CONFIG.TOKEN, session:sess, _t:Date.now()}, params);
-    const qs = new URLSearchParams(p).toString();
-    return this._fetchWithRetry(CONFIG.GAS_URL + '?' + qs, {});
+    return this._db(params, 2);
   },
   async _post(params){
-    const buildBody = ()=>{
-      const body = new FormData();
-      for(const k in params) body.append(k, params[k]);
-      body.append('token', CONFIG.TOKEN);
-      body.append('session', sessionStorage.getItem('staffSession') || '');
-      return body;
-    };
     // 冪等な操作のみリトライ（saveWeek/saveMaster/通知系）
     const idempotent = ['saveWeek','saveMaster','addNotification','sendEmail','saveStaffNotes','saveRecruitInfo'].includes(params.action);
-    const retries = idempotent ? 2 : 0;
-    return this._fetchWithRetry(CONFIG.GAS_URL, {method:'POST', body:buildBody()}, retries);
+    return this._db(params, idempotent ? 2 : 0);
   },
   async loadMaster(){
     try{

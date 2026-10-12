@@ -1650,7 +1650,8 @@ function _notifySaveFailure(resp){
   if(err === 'SESSION_REQUIRED' || err === 'FORBIDDEN'){
     if(_saveAlertShown) return;
     _saveAlertShown = true;
-    alert('⚠️ ログインの有効期限が切れています。\n\nここまでの操作は保存されていません。\n一度ログインし直してから、もう一度操作してください。');
+    try{ localStorage.removeItem('portalStaffSession'); }catch(_){}   // 覚えているログインも捨てる
+    alert('⚠️ ログインの有効期限が切れています。\n\nここまでの操作は保存されていません。\nポータルから開き直してから、もう一度操作してください。');
     return;
   }
   if(typeof toast === 'function'){
@@ -4390,41 +4391,35 @@ KANA_GROUPS.forEach(g=>{
   // ログアウトボタン
   const logoutBtn2 = document.getElementById('staffLogoutBtn');
   if(logoutBtn2) logoutBtn2.addEventListener('click',()=>{
+    localStorage.removeItem('portalStaffSession');
     sessionStorage.removeItem('staffAuth');
     sessionStorage.removeItem('staffName');
     sessionStorage.removeItem('staffSession');
     location.href='index.html';
   });
 
-  /* ★ 自動ログアウト（2026/08/04 変更）
-     30分では業務中に切れてしまうため17時間に延長。
-     また、未保存の変更があるときはログアウトしない
-     （ログアウトすると未保存の操作が失われるため）。 */
+  /* ★ 自動ログアウト（2026/10 変更）
+     操作の有無ではなく「ポータルでログインしてから20時間」で切れる（ポータルと同じ）。
+     サーバー側のログインも同じ時刻に切れるので、開いたままでも保存できなくなる。
+     スリープ中に時刻を過ぎることもあるので、1分ごとと画面に戻ったときに確かめる。 */
   (function(){
-    const IDLE_LIMIT = 17 * 60 * 60 * 1000; // 17時間
-    let idleTimer = null;
-    function doLogout(){
-      // 未保存の変更が残っているうちはログアウトしない
-      try{
-        if(Store.getDirtyKeys && Store.getDirtyKeys().length > 0){
-          resetIdle();          // 保存が終わるまで様子を見る
-          return;
-        }
-      }catch(_){ }
+    let exp = 0;
+    try{ exp = Number((JSON.parse(localStorage.getItem('portalStaffSession')||'null')||{}).expiresAt) || 0; }catch(_){ }
+    if(!exp) return;
+    let done = false;
+    function check(){
+      if(done || Date.now() < exp) return;
+      done = true;
+      localStorage.removeItem('portalStaffSession');
       sessionStorage.removeItem('staffAuth');
       sessionStorage.removeItem('staffName');
       sessionStorage.removeItem('staffSession');
-      alert('長時間操作がなかったため、自動ログアウトしました。');
-      location.href='index.html';
+      alert('ポータルでログインしてから20時間たったので、ログアウトしました。\nポータルから開き直してください。');
+      location.href='index.html?reason=expired';
     }
-    function resetIdle(){
-      if(idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(doLogout, IDLE_LIMIT);
-    }
-    ['click','keydown','touchstart','scroll'].forEach(ev=>{
-      document.addEventListener(ev, resetIdle, {passive:true});
-    });
-    resetIdle();
+    setInterval(check, 60*1000);
+    document.addEventListener('visibilitychange', check);
+    check();
   })();
 })();
 

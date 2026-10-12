@@ -1782,30 +1782,32 @@ document.getElementById('settingsBackBtn').addEventListener('click',()=>{
 });
 
 document.getElementById('settingsLogoutBtn').addEventListener('click',()=>{
+  localStorage.removeItem('portalStaffSession');
   sessionStorage.removeItem('staffAuth');
   sessionStorage.removeItem('staffName');
   sessionStorage.removeItem('staffSession');
   location.href='index.html';
 });
 
-// ★ 自動ログアウト（30分無操作）
+// ★ 自動ログアウト（2026/10 変更：ポータルでログインしてから20時間。チェック画面と同じ）
 (function(){
-  const IDLE_LIMIT = 30 * 60 * 1000;
-  let idleTimer = null;
-  function resetIdle(){
-    if(idleTimer) clearTimeout(idleTimer);
-    idleTimer = setTimeout(()=>{
-      sessionStorage.removeItem('staffAuth');
-      sessionStorage.removeItem('staffName');
-      sessionStorage.removeItem('staffSession');
-      alert('30分間操作がなかったため、自動ログアウトしました。');
-      location.href='index.html';
-    }, IDLE_LIMIT);
+  let exp = 0;
+  try{ exp = Number((JSON.parse(localStorage.getItem('portalStaffSession')||'null')||{}).expiresAt) || 0; }catch(_){ }
+  if(!exp) return;
+  let done = false;
+  function check(){
+    if(done || Date.now() < exp) return;
+    done = true;
+    localStorage.removeItem('portalStaffSession');
+    sessionStorage.removeItem('staffAuth');
+    sessionStorage.removeItem('staffName');
+    sessionStorage.removeItem('staffSession');
+    alert('ポータルでログインしてから20時間たったので、ログアウトしました。\nポータルから開き直してください。');
+    location.href='index.html?reason=expired';
   }
-  ['click','keydown','touchstart','scroll'].forEach(ev=>{
-    document.addEventListener(ev, resetIdle, {passive:true});
-  });
-  resetIdle();
+  setInterval(check, 60*1000);
+  document.addEventListener('visibilitychange', check);
+  check();
 })();
 
 // ★ キャスト配布情報 生成

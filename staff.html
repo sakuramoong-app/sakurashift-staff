@@ -2646,7 +2646,8 @@ const StaffApp = (function(){
     } else if(st==='change_requested'){
       actions+=`<button class="btn-sm btn-accept metal-glow" onclick="StaffApp.acceptChange('${esc(c.name)}','${wk}')">✅ 受理</button>
                <button class="btn-sm btn-reject metal-glow" onclick="StaffApp.rejectChange('${esc(c.name)}','${wk}')">🙅 却下</button>`;
-    } else if(['input_waiting','inputting','confirmed','change_inputting','change_confirmed'].includes(st) && hasShift && window.HpSync){
+    } else if(['input_waiting','inputting','confirmed','change_inputting','change_confirmed'].includes(st) && window.HpSync){
+      // （全部お休みにした週でも出す：公式HPから外すため）
       // ★ 受理したあとでも、公式HPに入れなおせる（受理のときに「あとで」を押した・失敗したお店のやりなおし）
       actions+=`<button class="btn-sm metal-glow" style="background:#FFF0F5;color:#C71585;border:1.5px solid #FFC2D1" onclick="StaffApp.offerHpOne('${esc(c.name)}','${wk}')">🌐 公式HPに入れる</button>`;
     }
@@ -3698,6 +3699,9 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       by: staffName||'内勤'}).catch(()=>{});
 
     toast(`${dateLabel} を変更し、${cast}さんへ通知しました`);
+    // ★ 受理ずみの週を内勤が直したら、公式HPにも入れるか聞く（お休みにしたときは公式HPから外す）
+    const w2=Store.getWeek(cast, wk);
+    if(w2 && ['input_waiting','inputting','confirmed','change_inputting','change_confirmed'].includes(w2.status)) offerHp([{cast, wk}]);
   }
 
   /* 内勤選択欄の文字色を、その人の色に合わせる */

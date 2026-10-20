@@ -5,7 +5,7 @@
    2. 「入れる」→ ロボット（Supabase の hp-shift-sync）が管理画面に保存して『更新』まで
    3. うまく入ったお店は、入力チェックに自動で ✅（記録簿は受理した時点で自動 ✅）
    ※ ヘブン・情報局・ぴゅあらばは今までどおり手で入れてチェック
-   ※ エイティーン・極門（ダミー名）は、あとで足す
+   ※ エイティーン・極門は、キャスト管理に入っているダミー名で管理画面のキャストを探して入れる（ダミー名がない子は入れない）
    ============================================================ */
 (function(){
   // サクラシフトの媒体の名前 → 公式HPのお店（キャスト台帳の在籍店舗の key）
@@ -13,6 +13,8 @@
     'サクラムーン': 'sakuramoon', 'ラナ鶯谷': 'lana_uguisu', 'ラナ錦糸町': 'lana_kinshi',
     'ドレスガーデン': 'dressgarden', 'ピーチムーン': 'peachmoon', 'キューティー': 'cutie', '逆AF倶楽部': 'gyakuanal',
   };
+  // ダミー名のお店：キャスト管理に入っているダミー名で、管理画面のキャストを探す（ダミー名がない子は入れない）
+  const DUMMY_STORES = { '18': 'eighteen', '極門': 'gokumon' };
   const AUTO_MEDIA = ['記録簿'];   // ロボットを使わずに自動で ✅（シフトをそのまま読んでいる）
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const DOW = '日月火水木金土';
@@ -66,7 +68,7 @@
     let autoN = 0;
     AUTO_MEDIA.filter(m => castStores.includes(m)).forEach(m => { autoN += check(o, w, o.wk, m, days); });
     if(autoN && o.after) await o.after();
-    const targets = Object.keys(HP_STORES).filter(m => castStores.includes(m));
+    const targets = Object.keys(HP_STORES).concat(Object.keys(DUMMY_STORES)).filter(m => castStores.includes(m));
     if(!targets.length || !days.length) return;
     const modal = openModal(o);
     const closed = new Promise(res => { modal._done = res; });   // 閉じるまで待つ（一括のときは1人ずつ順番に）
@@ -76,6 +78,16 @@
     const plan = [];   // { media, key, no, label, result }
     body.innerHTML = `<p>公式HPを読んでいます…（お店の数だけ時間がかかります）</p>`;
     for(const m of targets){
+      if(DUMMY_STORES[m]){   // エイティーン・極門：ダミー名で探す
+        const key = DUMMY_STORES[m], alias = (Store.getCastAlias ? Store.getCastAlias(o.cast, m) : '') || '';
+        if(!alias){ plan.push({ media: m, key, error: 'キャスト管理にダミー名が入っていないので入れません（入れるならキャスト管理でダミー名を入れてください）' }); continue; }
+        const r = await callFn({ action: 'preview', store: key, casts: [{ name: alias, label: o.cast + '（' + alias + '）', days: days.map(({ rest, ...d }) => d) }] });
+        if(!r.ok){ plan.push({ media: m, key, error: r.error || r.message || r.code || '読めませんでした' }); continue; }
+        const x = r.casts[0];
+        plan.push({ media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, alias });
+        body.innerHTML = `<p>公式HPを読んでいます…（${plan.length}／${targets.length}）</p>`;
+        continue;
+      }
       const key = HP_STORES[m], no = row && row.stores && row.stores[key] && Number(row.stores[key].siteNo);
       if(!no){ plan.push({ media: m, key, error: 'キャスト台帳にこのお店の在籍番号（公式HPの番号）がありません。手で入れてください' }); continue; }
       const r = await callFn({ action: 'preview', store: key, casts: [{ no, label: o.cast, days: days.map(({ rest, ...d }) => d) }] });

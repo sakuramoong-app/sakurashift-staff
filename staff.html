@@ -438,7 +438,7 @@
       <div id="inboxBox"></div>
     </div>
 
-    <!-- ★ 公式HP自動反映のお知らせ（しばらくのあいだ。2026/11/30 をすぎたら自動で出なくなる） -->
+    <!-- ★ 公式HP自動反映のお知らせ（しばらくのあいだ。2026/12/31 をすぎたら自動で出なくなる） -->
     <details class="inbox-card" id="hpNotice" style="border:2px solid #FFC2D1;background:#FFF8FB">
       <summary style="cursor:pointer;font-size:14px;font-weight:900;color:#C71585;list-style:none">🌐 公式HPへの自動反映が始まりました（使い方と注意・押すと開く／閉じる）</summary>
       <div style="font-size:13px;line-height:1.8;margin-top:8px;color:var(--text)">
@@ -459,13 +459,14 @@
           <li><b>❌ が出たら</b>、そのお店だけ手で入れて、店長（きゃ）に知らせてください</li>
           <li>今日から約5週間より先の日は、管理画面にまだ欄がないので入りません</li>
           <li>小窓を「あとで」で閉じても、受理は取り消されません</li>
+          <li>公式HPに入れた記録（だれが・だれの・どのお店・結果）：<a href="../portal/hpsync.html#log" target="_blank" rel="noopener" style="color:#C71585;font-weight:800">📜 記録を見る</a></li>
         </ul>
       </div>
     </details>
     <script>
       (function(){
         var n = document.getElementById('hpNotice'); if(!n) return;
-        if(new Date() > new Date('2026-11-30T23:59:59+09:00')){ n.remove(); return; }
+        if(new Date() > new Date('2026-12-31T23:59:59+09:00')){ n.remove(); return; }
         var k = 'hpNoticeClosed';
         try{ n.open = localStorage.getItem(k) !== '1'; }catch(e){ n.open = true; }
         n.addEventListener('toggle', function(){ try{ localStorage.setItem(k, n.open ? '0' : '1'); }catch(e){} });

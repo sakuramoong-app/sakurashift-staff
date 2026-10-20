@@ -385,6 +385,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="shift_db.js"></script>
+<script src="hp_sync.js"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -3010,6 +3011,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       StaffGas.notify(it.cast,'done','シフトが確定しました（'+_wkShortRange(it.wk)+'）');
     });
     toast(`${done}件のキャストへ確認通知を送信しました📤`);
+    offerHp(items.map(it=>({cast:it.cast, wk:it.wk})));
   }
 
   // ★ 提出を受けてキャストへ確認通知を送る（週はロックされる）
@@ -3022,6 +3024,16 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     const wkRange = _wkShortRange(wk);
     StaffGas.notify(cast,'done','シフトが確定しました（'+wkRange+'）');
     toast(cast+'さんへ確認通知を送信しました📤');
+    offerHp([{cast, wk}]);
+  }
+
+  // ★ 受理したら、公式HPに自動で入れるか聞く（hp_sync.js）。記録簿は自動で ✅
+  async function offerHp(list){
+    if(!window.HpSync) return;
+    for(const it of list){
+      try{ await HpSync.offer({ cast: it.cast, wk: it.wk, by: staffName, color: staffColor(staffName), after: async()=>{ renderAll(); await saveNow(); } }); }
+      catch(e){ toast('公式HPの自動反映でエラー：' + (e.message || e)); }
+    }
   }
 
   /* 週キー → "6/1〜6/7" 短縮範囲 */
@@ -3079,6 +3091,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     // ★ 受理通知（アプリ内＋メール）
     StaffGas.notify(cast,'change_done','変更申請が受理されました（'+_wkShortRange(wk)+'）');
     toast(cast+'さんの'+weekLabel(wk)+'の変更を受理しました✅');
+    offerHp([{cast, wk}]);
   }
 
   async function rejectChange(cast, wk){

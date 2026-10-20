@@ -2817,7 +2817,7 @@ const StaffApp = (function(){
           if(toRest && !REST_DAY_STORES.includes(m)) return `<div class="store-chip-cell off"><div class="store-chip-name">${esc(STORE_SHORT[m]||m)}</div></div>`;
           const ck=w.checks[ds+'_'+m];
           const checked=ck&&ck.checked;
-          const color=checked?(staffColor(ck.by)||'#5FD0A0'):'';
+          const color=checked?(staffColor(String(ck.by||'').replace('（自動）',''))||'#5FD0A0'):'';
           const updDate=checked&&ck.at?fmtCheckDate(ck.at):'';
           return `<div class="store-chip-cell ${checked?'on':''}">
             <div class="store-chip-name">${esc(STORE_SHORT[m]||m)}</div>
@@ -3001,7 +3001,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
       // 全部チェック済み → 自分がチェックした分だけ解除（他人の分は残す）
       dayStores.forEach(m=>{
         const ck=w.checks[ds+'_'+m];
-        if(ck && ck.checked && ck.by===staffName){
+        if(ck && ck.checked && String(ck.by||'').replace('（自動）','')===staffName){
           Store.dispatch('SET_CHECK',{cast,wk,ds,media:m,checked:false,by:staffName});
         }
       });

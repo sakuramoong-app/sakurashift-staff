@@ -150,13 +150,13 @@
         const need = p.rows.some(z => z.change && !z.problem && !z.skip);
         let ok = true, msg = '';
         if(need){
-          const r = await callFn({ action: 'apply', store: p.key, by: o.by, casts: [{ no: p.no, label: o.cast + (p.alias ? '（' + p.alias + '）' : ''), days: days.map(({ rest, ...d }) => d) }] });
+          const r = await callFn({ action: 'apply', store: p.key, by: o.by, casts: [{ cast: o.cast, no: p.no, label: o.cast + (p.alias ? '（' + p.alias + '）' : ''), days: days.map(({ rest, ...d }) => d) }] });
           const x = r.results && r.results[0];
           ok = !!(r.ok && x && x.ok);
           // ロボットまで届かなかった（通信エラーなど）ときは、こちらで記録を残す
           if(!r.logged){
             try{ await ShiftDB.client.from('hp_sync_log').insert({ store_key: p.key, store_label: p.store || p.media, by_name: o.by || '', cast_name: o.cast + (p.alias ? '（' + p.alias + '）' : ''),
-              casts: [{ no: p.no, label: o.cast, days: days.map(({ rest, ...d }) => d) }], ok: false, error_text: String(r.error || r.message || r.code || '返事がありませんでした') }); }catch(e){}
+              casts: [{ cast: o.cast, no: p.no, label: o.cast, days: days.map(({ rest, ...d }) => d) }], ok: false, error_text: String(r.error || r.message || r.code || '返事がありませんでした') }); }catch(e){}
           }
           msg = ok ? (x.changed + '日ぶん入れました' + (r.published && r.published.ok ? '・更新済み' : '（更新は管理画面で確認してください）')) : ((x && x.failedDates && x.failedDates.length ? 'うまく入らなかった日 ' + x.failedDates.join('、') : '') || r.error || r.message || '入れられませんでした');
         } else msg = 'もう同じ内容でした';
@@ -171,8 +171,61 @@
         + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.media)}：${esc(p.error)}</div>`).join('');
       go.remove();
       const close = modal.querySelector('[data-close]'); close.textContent = '閉じる'; close.className = 'go';
+      refreshAlerts();   // 失敗があれば、受信ボックスの上の警告に出す
     };
   }
 
-  window.HpSync = { offer, HP_STORES };
+  /* ============================================================
+     ⚠️ 公式HPに入らなかったシフトの警告（受信ボックスの上）
+     記録（hp_sync_log）の 14日分から、キャスト×お店×週 ごとに いちばん新しい記録 を見て、失敗のままなら出す。
+     もう一度入れて成功する／「✅ 手で入れた」を押す と消える
+     ============================================================ */
+  function mondayOf(ds){ const d = new Date(ds + 'T12:00:00'); const w = d.getDay(); d.setDate(d.getDate() + (w === 0 ? -6 : 1 - w)); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  let alertRows = [];
+  async function refreshAlerts(){
+    try{
+      const since = new Date(Date.now() - 14 * 86400e3).toISOString();
+      const { data, error } = await ShiftDB.client.from('hp_sync_log').select('id,at,by_name,cast_name,store_key,store_label,casts,ok,error_text').gte('at', since).order('at', { ascending: false }).limit(500);
+      if(error) return;
+      const seen = new Set(); alertRows = [];
+      (data || []).forEach(r => {
+        const c = (r.casts && r.casts[0]) || {};
+        const cast = c.cast || String(r.cast_name || '').replace(/（.*$/, '');
+        const d0 = c.days && c.days[0] && c.days[0].date;
+        const key = r.store_key + '|' + cast + '|' + (d0 ? mondayOf(d0) : '');
+        if(seen.has(key)) return; seen.add(key);   // いちばん新しい記録だけ見る
+        if(r.ok === false) alertRows.push(Object.assign({}, r, { cast, wk: d0 ? mondayOf(d0) : '' }));
+      });
+      paintAlerts();
+    }catch(e){}
+  }
+  function paintAlerts(){
+    let box = document.getElementById('hpAlert');
+    const anchor = document.querySelector('.inbox-card');
+    if(!anchor) return;
+    if(!alertRows.length){ if(box) box.remove(); return; }
+    if(!box){ box = document.createElement('div'); box.id = 'hpAlert'; anchor.parentNode.insertBefore(box, anchor); }
+    const when = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+    box.innerHTML = `<div style="background:#FFF1F1;border:2.5px solid #E5484D;border-radius:16px;padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:15px;font-weight:900;color:#C62828;margin-bottom:6px">⚠️ 公式HPに入らなかったシフトがあります（${alertRows.length}件）</div>
+      <div style="font-size:12px;color:#8a5050;margin-bottom:8px">「🌐 もう一度入れる」で入れなおすか、管理画面で手で入れてから「✅ 手で入れた」を押してください。入れなおして成功すると、ここから消えます。</div>
+      ${alertRows.map((r, i) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px dashed #F3B7B9;font-size:13px">
+        <b>${esc(r.cast_name || r.cast)}</b><span>→ ${esc(r.store_label || r.store_key)}</span>
+        <span style="color:#8a97a3">${esc(when(r.at))}${r.wk ? '・' + esc(r.wk.slice(5).replace('-', '/')) + 'の週' : ''}${r.by_name ? '・' + esc(r.by_name) : ''}</span>
+        <span style="color:#C62828;flex-basis:100%">${esc(r.error_text || 'うまく入らなかった日があります')}</span>
+        ${r.wk && typeof StaffApp !== 'undefined' && StaffApp.offerHpOne ? `<button type="button" data-retry="${i}" style="border:none;border-radius:10px;padding:6px 12px;background:#E5638C;color:#fff;font-weight:900;cursor:pointer;font-family:inherit">🌐 もう一度入れる</button>` : ''}
+        <button type="button" data-manual="${i}" style="border:1.5px solid #ddd;border-radius:10px;padding:6px 12px;background:#fff;font-weight:900;cursor:pointer;font-family:inherit">✅ 手で入れた</button></div>`).join('')}</div>`;
+    box.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => { const r = alertRows[+b.dataset.retry]; StaffApp.offerHpOne(r.cast, r.wk); });
+    box.querySelectorAll('[data-manual]').forEach(b => b.onclick = async () => {
+      const r = alertRows[+b.dataset.manual];
+      if(!confirm(`${r.cast_name || r.cast} → ${r.store_label || r.store_key}\n管理画面で手で入れましたか？（この警告を消します）`)) return;
+      const sel = document.getElementById('staffSelect');
+      try{ await ShiftDB.client.from('hp_sync_log').insert({ store_key: r.store_key, store_label: r.store_label, by_name: (sel && sel.value) || '', cast_name: r.cast_name, casts: r.casts, ok: true, error_text: '手で入れた（記録だけ）' }); }catch(e){}
+      refreshAlerts();
+    });
+  }
+  setTimeout(refreshAlerts, 3000);
+  setInterval(refreshAlerts, 180000);   // 3分ごと（ほかの内勤が入れた結果も出る）
+
+  window.HpSync = { offer, HP_STORES, refreshAlerts };
 })();

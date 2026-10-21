@@ -82,10 +82,12 @@
       if(DUMMY_STORES[m]){   // エイティーン・極門：ダミー名で探す
         const key = DUMMY_STORES[m], alias = (Store.getCastAlias ? Store.getCastAlias(o.cast, m) : '') || '';
         if(!alias){ plan.push({ media: m, key, error: 'キャスト管理にダミー名が入っていないので入れません（入れるならキャスト管理でダミー名を入れてください）' }); continue; }
-        const r = await callFn({ action: 'preview', store: key, casts: [{ name: alias, label: o.cast + '（' + alias + '）', days: days.map(({ rest, ...d }) => d) }] });
-        if(!r.ok){ plan.push({ media: m, key, error: r.error || r.message || r.code || '読めませんでした' }); continue; }
+        // 同じ名前が何人もいて、前に内勤が選んだ番号があれば、その番号で
+        const picked = await pickedNo(key, o.cast);
+        const r = await callFn({ action: 'preview', store: key, casts: [Object.assign(picked ? { no: picked } : { name: alias }, { label: o.cast + '（' + alias + '）', days: days.map(({ rest, ...d }) => d) })] });
+        if(!r.ok){ plan.push({ media: m, key, alias, error: r.error || r.message || r.code || '読めませんでした', candidates: r.candidates }); continue; }
         const x = r.casts[0];
-        plan.push({ media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, alias });
+        plan.push({ media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, alias, picked: !!picked });
         body.innerHTML = `<p>公式HPを読んでいます…（${plan.length}／${targets.length}）</p>`;
         continue;
       }
@@ -100,6 +102,19 @@
     paintPlan(modal, o, w, days, plan);
     return closed;
   }
+
+  // 同じ名前が何人もいるときに内勤が選んだ番号（hp_dummy_map）
+  async function pickedNo(key, cast){
+    try{ const { data } = await ShiftDB.client.from('hp_dummy_map').select('no').eq('store_key', key).eq('cast_name', cast).maybeSingle(); return data && data.no ? Number(data.no) : 0; }
+    catch(e){ return 0; }
+  }
+  async function savePick(key, cast, no, by){
+    const { error } = await ShiftDB.client.from('hp_dummy_map').upsert({ store_key: key, cast_name: cast, no, by_name: by || '', updated_at: new Date().toISOString() }, { onConflict: 'store_key,cast_name' });
+    if(error) throw error;
+  }
+  async function clearPick(key, cast){ await ShiftDB.client.from('hp_dummy_map').delete().eq('store_key', key).eq('cast_name', cast); }
+  // 小窓を開きなおす（番号を選んだ・選びなおしたあと）
+  function reopen(modal, o){ const done = modal._done; modal.remove(); offer(o).then(() => { if(done) done(); }); }
 
   function openModal(o){
     const modal = document.createElement('div');
@@ -127,15 +142,34 @@
     const body = modal.querySelector('.hp-body');
     const cell = v => v ? `${v.on ? '✅' : '⬜'} ${esc(v.start)}〜${esc(v.end)}` : '';
     let nChange = 0;
-    body.innerHTML = plan.map(p => {
+    body.innerHTML = plan.map((p, pi) => {
+      // 同じ名前が何人もいる → 内勤が番号を選ぶ（選んだ番号は覚えておく）
+      if(p.candidates && p.candidates.length) return `<div class="st">${esc(p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>
+        <div style="background:#FFF6D6;border-radius:10px;padding:8px 10px;margin:4px 0 8px">
+          <div style="font-size:12.5px;margin-bottom:6px">${esc(o.cast)}さん（ダミー名「${esc(p.alias)}」）は、管理画面のどの番号の子ですか？ 選んだ番号は覚えておくので、次からは自動で入ります。</div>
+          ${p.candidates.map(c => `<label style="display:block;font-size:13.5px;padding:2px 0"><input type="radio" name="pick${pi}" value="${c.no}"> ${esc(c.no)}番 ${esc(c.name)} ${c.onHp ? '<span class="hp-ok">（公式HPに出ている）</span>' : '<span style="color:#8a97a3">（公式HPには出ていない）</span>'}</label>`).join('')}
+          <button type="button" class="go" style="margin-top:6px;padding:7px 14px;font-size:13px" data-pick="${pi}">この番号に決める</button></div>`;
       if(p.error) return `<div class="st">${esc(p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>`;
       const ch = p.rows.filter(z => z.change && !z.problem && !z.skip).length; nChange += ch;
-      return `<div class="st">${esc(p.store || p.media)} <small style="color:#8a97a3">（公式HP ${esc(p.no)} ${esc(p.name)}）</small> ${ch ? `<span class="hp-ng">${ch}日 変わる</span>` : '<span class="hp-ok">同じ（変わらない）</span>'}</div>
+      return `<div class="st">${esc(p.store || p.media)} <small style="color:#8a97a3">（公式HP ${esc(p.no)} ${esc(p.name)}）</small> ${ch ? `<span class="hp-ng">${ch}日 変わる</span>` : '<span class="hp-ok">同じ（変わらない）</span>'}
+        ${p.picked ? `<a href="javascript:void(0)" data-repick="${pi}" style="font-size:12px;color:#C71585;margin-left:6px">番号を選びなおす</a>` : ''}</div>
         <table><tr><th>日</th><th>サクラシフト</th><th>今の公式HP</th><th>入れたあと</th><th></th></tr>
         ${p.rows.map(z => { const d = days.find(x => x.date === z.date) || {};
           return `<tr class="${z.change ? 'chg' : ''}"><td>${md(z.date)}</td><td>${d.off ? 'お休み' : hl(d.start) + '〜' + hl(d.end)}</td><td>${cell(z.now)}</td><td>${cell(z.next)}</td>
           <td>${z.skip ? `<span class="hp-ng">${esc(z.skip)}</span>` : z.problem ? `<span class="hp-ng">⚠️ ${esc(z.problem)}</span>` : z.change ? '<b>変わる</b>' : 'そのまま'}</td></tr>`; }).join('')}</table>`;
     }).join('') + `<p class="sub" style="margin-top:6px">黄色の行が変わります。✅＝予（出勤予定）にチェック、⬜＝チェックなし</p>`;
+    body.querySelectorAll('[data-pick]').forEach(b => b.onclick = async () => {
+      const p = plan[+b.dataset.pick], r = body.querySelector(`input[name="pick${b.dataset.pick}"]:checked`);
+      if(!r){ alert('番号を選んでください'); return; }
+      try{ await savePick(p.key, o.cast, Number(r.value), o.by); reopen(modal, o); }
+      catch(e){ alert('覚えておけませんでした（SQL 123 は実行ずみ？）：' + (e.message || e)); }
+    });
+    body.querySelectorAll('[data-repick]').forEach(a => a.onclick = async () => {
+      const p = plan[+a.dataset.repick];
+      if(!confirm(`${p.store || p.media} の番号（${p.no}番）を選びなおしますか？`)) return;
+      try{ await clearPick(p.key, o.cast); }catch(e){}
+      reopen(modal, o);
+    });
     const btns = modal.querySelector('.btns');
     const okPlans = plan.filter(p => !p.error);
     if(!okPlans.length) return;

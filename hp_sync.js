@@ -4,7 +4,7 @@
    1. 受理したら、そのキャストの在籍店舗の公式HPを読んで「この内容で公式HPに入れますか？」を出す
    2. 「入れる」→ ロボット（Supabase の hp-shift-sync）が管理画面に保存して『更新』まで
    3. うまく入ったお店は、入力チェックに自動で ✅（記録簿は、新しい記録簿を本番で使い始めるまで手でチェック）
-   ※ ヘブン・情報局・ぴゅあらばは今までどおり手で入れてチェック
+   ※ ヘブン（サクラ・ラナ）・ぴゅあらば／口コミ情報局（キューティー・極門）も、媒体の出勤表の名前で探して入れる（10/22〜）
    ※ エイティーン・極門は、キャスト管理に入っているダミー名で管理画面のキャストを探して入れる（ダミー名がない子は入れない）
    ============================================================ */
 (function(){
@@ -15,6 +15,15 @@
   };
   // ダミー名のお店：キャスト管理に入っているダミー名で、管理画面のキャストを探す（ダミー名がない子は入れない）
   const DUMMY_STORES = { '18': 'eighteen', '極門': 'gokumon' };
+  // 媒体（ヘブン・ぴゅあらば・口コミ情報局）：媒体の出勤表の名前で探す。alias = そのお店のダミー名で探す（極門）
+  const MEDIA = {
+    'ヘブンサクラ': { media: 'heaven', store: 'sakuramoon', label: 'ヘブン' },
+    'ヘブンラナ': { media: 'heaven', store: 'lana_uguisu', label: 'ヘブン' },
+    '(キュ)ぴゅあらば': { media: 'pure', store: 'cutie', label: 'ぴゅあらば' },
+    '(キュ)情報局': { media: 'joho', store: 'cutie', label: '口コミ情報局' },
+    '(極)ぴゅあらば': { media: 'pure', store: 'gokumon', label: 'ぴゅあらば', alias: '極門' },
+    '(極)情報局': { media: 'joho', store: 'gokumon', label: '口コミ情報局', alias: '極門' },
+  };
   // 自動で ✅ にする媒体（新しい記録簿を本番で使い始めたら '記録簿' を入れる。それまでは手でチェック）
   const AUTO_MEDIA = [];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -69,36 +78,45 @@
     let autoN = 0;
     AUTO_MEDIA.filter(m => castStores.includes(m)).forEach(m => { autoN += check(o, w, o.wk, m, days); });
     if(autoN && o.after) await o.after();
-    const targets = Object.keys(HP_STORES).concat(Object.keys(DUMMY_STORES)).filter(m => castStores.includes(m));
+    const targets = Object.keys(HP_STORES).concat(Object.keys(DUMMY_STORES), Object.keys(MEDIA)).filter(m => castStores.includes(m));
     if(!targets.length || !days.length) return;
     const modal = openModal(o);
     const closed = new Promise(res => { modal._done = res; });   // 閉じるまで待つ（一括のときは1人ずつ順番に）
     const body = modal.querySelector('.hp-body');
     let row;
     try{ row = await castRow(o.cast); }catch(e){ body.innerHTML = `<p class="hp-ng">キャスト台帳を読めませんでした：${esc(e.message || e)}</p>`; return closed; }
-    const plan = [];   // { media, key, no, label, result }
-    body.innerHTML = `<p>公式HPを読んでいます…（お店の数だけ時間がかかります）</p>`;
-    for(const m of targets){
+    const wdays = days.map(({ rest, ...d }) => d);
+    let nDone = 0;
+    body.innerHTML = `<p>公式HP・媒体を読んでいます…（お店はいっしょに読むので、1分ほど）</p>`;
+    const one = async m => {
+      if(MEDIA[m]){   // 媒体：媒体の出勤表の名前で探す（極門はダミー名）
+        const t = MEDIA[m], alias = t.alias ? ((Store.getCastAlias ? Store.getCastAlias(o.cast, t.alias) : '') || '') : '';
+        if(t.alias && !alias) return { media: m, kind: t.media, key: t.store, error: 'キャスト管理に' + t.alias + 'のダミー名が入っていないので入れません' };
+        const name = alias || o.cast;
+        const r = await callFn({ action: 'media_preview', media: t.media, store: t.store, casts: [{ cast: o.cast, name, label: o.cast + (alias ? '（' + alias + '）' : ''), days: wdays }] });
+        if(!r.ok) return { media: m, kind: t.media, key: t.store, alias, error: r.error || r.message || r.code || '読めませんでした' };
+        return { media: m, kind: t.media, key: t.store, store: r.store, name: r.name, mname: name, rows: r.rows, alias };
+      }
       if(DUMMY_STORES[m]){   // エイティーン・極門：ダミー名で探す
         const key = DUMMY_STORES[m], alias = (Store.getCastAlias ? Store.getCastAlias(o.cast, m) : '') || '';
-        if(!alias){ plan.push({ media: m, key, error: 'キャスト管理にダミー名が入っていないので入れません（入れるならキャスト管理でダミー名を入れてください）' }); continue; }
+        if(!alias) return { media: m, key, error: 'キャスト管理にダミー名が入っていないので入れません（入れるならキャスト管理でダミー名を入れてください）' };
         // 同じ名前が何人もいて、前に内勤が選んだ番号があれば、その番号で
         const picked = await pickedNo(key, o.cast);
-        const r = await callFn({ action: 'preview', store: key, casts: [Object.assign(picked ? { no: picked } : { name: alias }, { label: o.cast + '（' + alias + '）', days: days.map(({ rest, ...d }) => d) })] });
-        if(!r.ok){ plan.push({ media: m, key, alias, error: r.error || r.message || r.code || '読めませんでした', candidates: r.candidates }); continue; }
+        const r = await callFn({ action: 'preview', store: key, casts: [Object.assign(picked ? { no: picked } : { name: alias }, { label: o.cast + '（' + alias + '）', days: wdays })] });
+        if(!r.ok) return { media: m, key, alias, error: r.error || r.message || r.code || '読めませんでした', candidates: r.candidates };
         const x = r.casts[0];
-        plan.push({ media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, alias, picked: !!picked });
-        body.innerHTML = `<p>公式HPを読んでいます…（${plan.length}／${targets.length}）</p>`;
-        continue;
+        return { media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, alias, picked: !!picked };
       }
       const key = HP_STORES[m], no = row && row.stores && row.stores[key] && Number(row.stores[key].siteNo);
-      if(!no){ plan.push({ media: m, key, error: 'キャスト台帳にこのお店の在籍番号（公式HPの番号）がありません。手で入れてください' }); continue; }
-      const r = await callFn({ action: 'preview', store: key, casts: [{ no, label: o.cast, days: days.map(({ rest, ...d }) => d) }] });
-      if(!r.ok){ plan.push({ media: m, key, no, error: r.error || r.message || r.code || '読めませんでした' }); continue; }
+      if(!no) return { media: m, key, error: 'キャスト台帳にこのお店の在籍番号（公式HPの番号）がありません。手で入れてください' };
+      const r = await callFn({ action: 'preview', store: key, casts: [{ no, label: o.cast, days: wdays }] });
+      if(!r.ok) return { media: m, key, no, error: r.error || r.message || r.code || '読めませんでした' };
       const x = r.casts[0];
-      plan.push({ media: m, key, no, store: r.store, name: x.name, rows: x.rows, error: x.error });
-      body.innerHTML = `<p>公式HPを読んでいます…（${plan.length}／${targets.length}）</p>`;
-    }
+      return { media: m, key, no, store: r.store, name: x.name, rows: x.rows, error: x.error };
+    };
+    // お店・媒体ごとに別々のロボットが読むので、いっしょに読む（順番は targets のまま）
+    const plan = await Promise.all(targets.map(m => one(m).catch(e => ({ media: m, error: String(e.message || e) })).then(p => {
+      nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${targets.length}）</p>`; return p; })));
     paintPlan(modal, o, w, days, plan);
     return closed;
   }
@@ -130,8 +148,8 @@
       .hp-modal .st{font-weight:900;margin-top:10px;} .hp-modal .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
       .hp-modal button{border:none;border-radius:12px;padding:11px 16px;font-family:inherit;font-size:14px;font-weight:900;cursor:pointer;}
       .hp-modal .go{background:linear-gradient(135deg,#ff9fb8,#e5638c);color:#fff;} .hp-modal .no{background:#eef3f7;color:#5c6b77;}
-    </style><div class="box"><h3>🌐 ${esc(o.cast)}さんのシフトを公式HPに入れますか？</h3>
-      <div class="sub">${esc(md(weekDates(o.wk)[0]))}〜${esc(md(weekDates(o.wk)[6]))}／ヘブン・情報局・ぴゅあらばは今までどおり手で入れてください</div>
+    </style><div class="box"><h3>🌐 ${esc(o.cast)}さんのシフトを公式HP・媒体に入れますか？</h3>
+      <div class="sub">${esc(md(weekDates(o.wk)[0]))}〜${esc(md(weekDates(o.wk)[6]))}／媒体は、媒体の出勤表の名前で探します</div>
       <div class="hp-body"></div><div class="btns"><button class="no" data-close>あとで（手で入れる）</button></div></div>`;
     document.body.appendChild(modal);
     modal.querySelector('[data-close]').onclick = () => { modal.remove(); if(modal._done) modal._done(); };
@@ -151,9 +169,9 @@
           <button type="button" class="go" style="margin-top:6px;padding:7px 14px;font-size:13px" data-pick="${pi}">この番号に決める</button></div>`;
       if(p.error) return `<div class="st">${esc(p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>`;
       const ch = p.rows.filter(z => z.change && !z.problem && !z.skip).length; nChange += ch;
-      return `<div class="st">${esc(p.store || p.media)} <small style="color:#8a97a3">（公式HP ${esc(p.no)} ${esc(p.name)}）</small> ${ch ? `<span class="hp-ng">${ch}日 変わる</span>` : '<span class="hp-ok">同じ（変わらない）</span>'}
+      return `<div class="st">${esc(p.store || p.media)} <small style="color:#8a97a3">（${p.kind ? '' : '公式HP ' + esc(p.no) + ' '}${esc(p.name)}）</small> ${ch ? `<span class="hp-ng">${ch}日 変わる</span>` : '<span class="hp-ok">同じ（変わらない）</span>'}
         ${p.picked ? `<a href="javascript:void(0)" data-repick="${pi}" style="font-size:12px;color:#C71585;margin-left:6px">番号を選びなおす</a>` : ''}</div>
-        <table><tr><th>日</th><th>サクラシフト</th><th>今の公式HP</th><th>入れたあと</th><th></th></tr>
+        <table><tr><th>日</th><th>サクラシフト</th><th>${p.kind ? '今の媒体' : '今の公式HP'}</th><th>入れたあと</th><th></th></tr>
         ${p.rows.map(z => { const d = days.find(x => x.date === z.date) || {};
           return `<tr class="${z.change ? 'chg' : ''}"><td>${md(z.date)}</td><td>${d.off ? 'お休み' : hl(d.start) + '〜' + hl(d.end)}</td><td>${cell(z.now)}</td><td>${cell(z.next)}</td>
           <td>${z.skip ? `<span class="hp-ng">${esc(z.skip)}</span>` : z.problem ? `<span class="hp-ng">⚠️ ${esc(z.problem)}</span>` : z.change ? '<b>変わる</b>' : 'そのまま'}</td></tr>`; }).join('')}</table>`;
@@ -175,7 +193,7 @@
     if(!okPlans.length) return;
     const go = document.createElement('button');
     go.className = 'go';
-    go.textContent = nChange ? '🌐 この内容で公式HPに入れる' : '✅ 公式HPはもう同じ内容（チェックだけつける）';
+    go.textContent = nChange ? '🌐 この内容で公式HP・媒体に入れる' : '✅ もう同じ内容（チェックだけつける）';
     btns.insertBefore(go, btns.firstChild);
     go.onclick = async () => {
       go.disabled = true; go.textContent = '入れています…（1分ほどかかることがあります）';
@@ -183,7 +201,16 @@
       for(const p of okPlans){
         const need = p.rows.some(z => z.change && !z.problem && !z.skip);
         let ok = true, msg = '';
-        if(need){
+        if(need && p.kind){   // 媒体（ヘブン・ぴゅあらば・口コミ情報局）
+          const r = await callFn({ action: 'media_apply', media: p.kind, store: p.key, by: o.by, casts: [{ cast: o.cast, name: p.mname, label: o.cast + (p.alias ? '（' + p.alias + '）' : ''), days: days.map(({ rest, ...d }) => d) }] });
+          const x = r.results && r.results[0];
+          ok = !!(r.ok && x && x.ok);
+          if(!r.logged){
+            try{ await ShiftDB.client.from('hp_sync_log').insert({ store_key: p.kind + ':' + p.key, store_label: p.store || p.media, by_name: o.by || '', cast_name: o.cast + (p.alias ? '（' + p.alias + '）' : ''),
+              casts: [{ cast: o.cast, name: p.mname, label: o.cast, days: days.map(({ rest, ...d }) => d) }], ok: false, error_text: String(r.error || r.message || r.code || '返事がありませんでした') }); }catch(e){}
+          }
+          msg = ok ? x.changed + '日ぶん入れました' : ((x && x.failedDates && x.failedDates.length ? 'うまく入らなかった日 ' + x.failedDates.join('、') : '') || r.error || r.message || '入れられませんでした');
+        } else if(need){
           const r = await callFn({ action: 'apply', store: p.key, by: o.by, casts: [{ cast: o.cast, no: p.no, label: o.cast + (p.alias ? '（' + p.alias + '）' : ''), days: days.map(({ rest, ...d }) => d) }] });
           const x = r.results && r.results[0];
           ok = !!(r.ok && x && x.ok);
@@ -241,7 +268,7 @@
     if(!box){ box = document.createElement('div'); box.id = 'hpAlert'; anchor.parentNode.insertBefore(box, anchor); }
     const when = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
     box.innerHTML = `<div style="background:#FFF1F1;border:2.5px solid #E5484D;border-radius:16px;padding:12px 14px;margin-bottom:12px">
-      <div style="font-size:15px;font-weight:900;color:#C62828;margin-bottom:6px">⚠️ 公式HPに入らなかったシフトがあります（${alertRows.length}件）</div>
+      <div style="font-size:15px;font-weight:900;color:#C62828;margin-bottom:6px">⚠️ 公式HP・媒体に入らなかったシフトがあります（${alertRows.length}件）</div>
       <div style="font-size:12px;color:#8a5050;margin-bottom:8px">「🌐 もう一度入れる」で入れなおすか、管理画面で手で入れてから「✅ 手で入れた」を押してください。入れなおして成功すると、ここから消えます。</div>
       ${alertRows.map((r, i) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px dashed #F3B7B9;font-size:13px">
         <b>${esc(r.cast_name || r.cast)}</b><span>→ ${esc(r.store_label || r.store_key)}</span>

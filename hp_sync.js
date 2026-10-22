@@ -226,7 +226,14 @@
               casts: [{ cast: o.cast, no: p.no, label: o.cast, days: days.map(({ rest, ...d }) => d) }], ok: false, error_text: String(r.error || r.message || r.code || '返事がありませんでした') }); }catch(e){}
           }
           msg = ok ? (x.changed + '日ぶん入れました' + (r.published && r.published.ok ? '・更新済み' : '（更新は管理画面で確認してください）')) : ((x && x.failedDates && x.failedDates.length ? 'うまく入らなかった日 ' + x.failedDates.join('、') : '') || r.error || r.message || '入れられませんでした');
-        } else msg = 'もう同じ内容でした';
+        } else {
+          msg = 'もう同じ内容でした';
+          // 前に失敗した警告が残らないように、「同じ内容だった（入っている）」も成功として記録する
+          if(!p.rows.some(z => z.problem || z.skip)){
+            try{ await ShiftDB.client.from('hp_sync_log').insert({ store_key: p.kind ? p.kind + ':' + p.key : p.key, store_label: p.store || p.media, by_name: o.by || '', cast_name: o.cast + (p.alias ? '（' + p.alias + '）' : ''),
+              casts: [{ cast: o.cast, no: p.no, name: p.mname, label: o.cast, days: days.map(({ rest, ...d }) => d) }], results: [{ ok: true, changed: 0 }], ok: true, error_text: 'もう同じ内容でした（確認だけ）' }); }catch(e){}
+          }
+        }
         // 入れたお店（問題のある日がないとき）は、入力チェックに自動で ✅
         const probs = p.rows.filter(z => z.problem || z.skip).length;
         let checked = 0;

@@ -3070,7 +3070,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   async function offerHp(list){
     if(!window.HpSync) return;
     for(const it of list){
-      try{ await HpSync.offer({ cast: it.cast, wk: it.wk, by: staffName, color: staffColor(staffName), after: async()=>{ renderAll(); await saveNow(); } }); }
+      try{ await HpSync.offer({ cast: it.cast, wk: it.wk, manual: !!it.manual, by: staffName, color: staffColor(staffName), after: async()=>{ renderAll(); await saveNow(); } }); }
       catch(e){ toast('公式HPの自動反映でエラー：' + (e.message || e)); }
     }
   }
@@ -4368,7 +4368,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     toggleCheck, toggleDayAll, fillRemaining,
     applyStaffSelectColor, openCast3Weeks,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, openShiftEdit, showDayHistory,
-    offerHpOne: (cast, wk)=>offerHp([{cast, wk}]),
+    offerHpOne: (cast, wk)=>offerHp([{cast, wk, manual: true}]),
     acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,

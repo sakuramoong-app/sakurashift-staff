@@ -71,7 +71,9 @@
   /* 受理のあとに呼ぶ：o = { cast, wk, by, color, after: async()=>{ 画面の描きなおし・保存 } } */
   async function offer(o){
     const w = Store.getWeek(o.cast, o.wk);
-    if(!w) return;
+    // 小窓が出ないときは、理由を下に出す（何も起きないように見えないように）
+    const say = msg => { if(o.manual) alert(msg); };   // ボタンで開いたときだけ（受理のときの自動は、入れる先がなければ何も出さない）
+    if(!w){ say('この週のシフトが見つかりませんでした'); return; }
     const castStores = Store.getCastStores(o.cast) || [];
     const days = daysOf(w, o.wk);
     // AUTO_MEDIA の媒体は受理した時点で自動 ✅（今はなし）
@@ -79,7 +81,8 @@
     AUTO_MEDIA.filter(m => castStores.includes(m)).forEach(m => { autoN += check(o, w, o.wk, m, days); });
     if(autoN && o.after) await o.after();
     const targets = Object.keys(HP_STORES).concat(Object.keys(DUMMY_STORES), Object.keys(MEDIA)).filter(m => castStores.includes(m));
-    if(!targets.length || !days.length) return;
+    if(!days.length){ say('今日より前の週なので、入れる日がありません'); return; }
+    if(!targets.length){ say(o.cast + 'さんは、公式HP・媒体のチェック欄（入れる先）がありません'); return; }
     const modal = openModal(o);
     const closed = new Promise(res => { modal._done = res; });   // 閉じるまで待つ（一括のときは1人ずつ順番に）
     const body = modal.querySelector('.hp-body');
@@ -92,10 +95,13 @@
       if(MEDIA[m]){   // 媒体：媒体の出勤表の名前で探す（極門はダミー名）
         const t = MEDIA[m], alias = t.alias ? ((Store.getCastAlias ? Store.getCastAlias(o.cast, t.alias) : '') || '') : '';
         if(t.alias && !alias) return { media: m, kind: t.media, key: t.store, error: 'キャスト管理に' + t.alias + 'のダミー名が入っていないので入れません' };
-        const name = alias || o.cast;
-        const r = await callFn({ action: 'media_preview', media: t.media, store: t.store, casts: [{ cast: o.cast, name, label: o.cast + (alias ? '（' + alias + '）' : ''), days: wdays }] });
+        // 媒体の名前は公式HPと同じ → キャスト台帳の「そのお店の公式HPでの名前」→ 正式名 → サクラシフトの名前 の順に試す
+        const st = row && row.stores && row.stores[t.store];
+        const names = alias ? [alias] : [st && st.name, row && row.official_name, o.cast, ...Object.entries((row && row.stores) || {}).filter(([k]) => k !== 'eighteen' && k !== 'gokumon').map(([, x]) => x && x.name)].filter(Boolean);   // 最後に、ほかのお店での名前も（ダミー名のお店はのぞく：別の子に入らないように）
+        const name = names[0];
+        const r = await callFn({ action: 'media_preview', media: t.media, store: t.store, casts: [{ cast: o.cast, name, names, label: o.cast + (alias ? '（' + alias + '）' : ''), days: wdays }] });
         if(!r.ok) return { media: m, kind: t.media, key: t.store, alias, error: r.error || r.message || r.code || '読めませんでした' };
-        return { media: m, kind: t.media, key: t.store, store: r.store, name: r.name, mname: name, rows: r.rows, alias };
+        return { media: m, kind: t.media, key: t.store, store: r.store, name: r.name, mname: r.name || name, rows: r.rows, alias };
       }
       if(DUMMY_STORES[m]){   // エイティーン・極門：ダミー名で探す
         const key = DUMMY_STORES[m], alias = (Store.getCastAlias ? Store.getCastAlias(o.cast, m) : '') || '';

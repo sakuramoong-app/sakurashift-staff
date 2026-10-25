@@ -114,7 +114,19 @@
         return { media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, alias, picked: !!picked };
       }
       const key = HP_STORES[m], no = row && row.stores && row.stores[key] && Number(row.stores[key].siteNo);
-      if(!no) return { media: m, key, error: 'キャスト台帳にこのお店の在籍番号（公式HPの番号）がありません。手で入れてください' };
+      if(!no){
+        // 台帳に番号がない（新しいキャストなど）→ 管理画面のスケジュールの名前で探す。見つかったら台帳にも入れる（下の saveFoundNos）
+        const st = row && row.stores && row.stores[key];
+        const names = [...new Set([st && st.name, row && row.official_name, o.cast].filter(Boolean))];
+        let lastErr = '';
+        for(const name of names){
+          const r = await callFn({ action: 'preview', store: key, casts: [{ name, label: o.cast, days: wdays }] });
+          const x = r.ok && r.casts && r.casts[0];
+          if(x && x.no) return { media: m, key, no: x.no, store: r.store, name: x.name, rows: x.rows, error: x.error, found: true };
+          lastErr = r.error || r.message || '';
+        }
+        return { media: m, key, error: '公式HPの管理画面に「' + names.join('」「') + '」が見つかりませんでした。キャスト台帳に在籍番号を手で入れてください' + (/人います/.test(lastErr) ? '（' + lastErr + '）' : '') };
+      }
       const r = await callFn({ action: 'preview', store: key, casts: [{ no, label: o.cast, days: wdays }] });
       if(!r.ok) return { media: m, key, no, error: r.error || r.message || r.code || '読めませんでした' };
       const x = r.casts[0];
@@ -123,8 +135,39 @@
     // お店・媒体ごとに別々のロボットが読むので、いっしょに読む（順番は targets のまま）
     const plan = await Promise.all(targets.map(m => one(m).catch(e => ({ media: m, error: String(e.message || e) })).then(p => {
       nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${targets.length}）</p>`; return p; })));
+    await saveFoundNos(o, row, plan);
     paintPlan(modal, o, w, days, plan);
     return closed;
+  }
+
+  // 名前で見つけた在籍番号を、キャスト台帳に入れる（台帳にいない新しいキャストは、台帳に入れて サクラシフト・同じ名前のプロフ とつなぐ）
+  // 台帳に入れられなくても、今回の公式HPへの反映はそのままできる
+  async function saveFoundNos(o, row, plan){
+    const found = plan.filter(p => p.found && p.no);
+    if(!found.length) return;
+    try{
+      if(!row){
+        let prof_id = null;
+        try{
+          const { data } = await ShiftDB.client.from('prof_casts').select('id').eq('name', o.cast).eq('deleted', false).limit(2);
+          if(data && data.length === 1){
+            const { data: used } = await ShiftDB.client.from('master_casts').select('id').eq('prof_id', data[0].id).limit(1);
+            if(!used || !used.length) prof_id = data[0].id;   // ほかの台帳の人とつながっていないときだけ
+          }
+        }catch(e){}
+        const stores = {}; found.forEach(p => { stores[p.key] = { siteNo: String(p.no) }; });
+        const { data, error } = await ShiftDB.client.from('master_casts').insert({ official_name: o.cast, shift_name: o.cast, status: 'active', stores, prof_id })
+          .select('id,official_name,shift_name,stores').single();
+        if(!error && data && castCache) castCache.push(data);
+        found.forEach(p => { p.note = error ? '' : 'キャスト台帳に入れて、在籍番号 ' + p.no + ' を入れました'; });
+      }else{
+        const stores = Object.assign({}, row.stores || {});
+        found.forEach(p => { stores[p.key] = Object.assign({}, stores[p.key] || {}, { siteNo: String(p.no) }); });
+        const { error } = await ShiftDB.client.from('master_casts').update({ stores }).eq('id', row.id);
+        if(!error) row.stores = stores;
+        found.forEach(p => { p.note = error ? '' : 'キャスト台帳に在籍番号 ' + p.no + ' を入れました'; });
+      }
+    }catch(e){}
   }
 
   // 同じ名前が何人もいるときに内勤が選んだ番号（hp_dummy_map）
@@ -177,6 +220,7 @@
       const ch = p.rows.filter(z => z.change && !z.problem && !z.skip).length; nChange += ch;
       return `<div class="st">${esc(p.store || p.media)} <small style="color:#8a97a3">（${p.kind ? '' : '公式HP ' + esc(p.no) + ' '}${esc(p.name)}）</small> ${ch ? `<span class="hp-ng">${ch}日 変わる</span>` : '<span class="hp-ok">同じ（変わらない）</span>'}
         ${p.picked ? `<a href="javascript:void(0)" data-repick="${pi}" style="font-size:12px;color:#C71585;margin-left:6px">番号を選びなおす</a>` : ''}</div>
+        ${p.found ? `<div style="font-size:12px;color:#1a7f4b;margin:-2px 0 4px">🔎 名前で番号を見つけました${p.note ? '（' + esc(p.note) + '）' : ''}</div>` : ''}
         <table><tr><th>日</th><th>サクラシフト</th><th>${p.kind ? '今の媒体' : '今の公式HP'}</th><th>入れたあと</th><th></th></tr>
         ${p.rows.map(z => { const d = days.find(x => x.date === z.date) || {};
           return `<tr class="${z.change ? 'chg' : ''}"><td>${md(z.date)}</td><td>${d.off ? 'お休み' : hl(d.start) + '〜' + hl(d.end)}</td><td>${cell(z.now)}</td><td>${cell(z.next)}</td>

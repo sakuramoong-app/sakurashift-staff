@@ -249,6 +249,21 @@
       if(ROLE !== 'staff') return { error: 'FORBIDDEN' };
       const data = parse(p.data);
       if(!data || typeof data !== 'object') return { error: 'INVALID_DATA' };
+      // 画面を開いたあとにキャスト台帳から登録された子（サーバーにいて、この画面の名簿にいない子）は消さない
+      // （キャストを消すときは、先にサーバーで消している＝ deleteCast ので、消した子がもどることはない）
+      try{
+        const cur = await loadMaster();
+        const have = new Set((data.castList || []).map(c => c && c.name));
+        const extra = (cur.castList || []).filter(c => c && c.name && !have.has(c.name));
+        if(extra.length){
+          data.castList = (data.castList || []).concat(extra);
+          data.castStores = data.castStores || {}; data.castAliases = data.castAliases || {};
+          extra.forEach(c => {
+            if(cur.castStores && cur.castStores[c.name] && !data.castStores[c.name]) data.castStores[c.name] = cur.castStores[c.name];
+            if(cur.castAliases && cur.castAliases[c.name] && !data.castAliases[c.name]) data.castAliases[c.name] = cur.castAliases[c.name];
+          });
+        }
+      }catch(e){ /* 読めなければ今までどおり */ }
       q(await sb.from('shift_master').upsert({ id: 1, data }));
       // 設定変更の記録（キャストが減っていないか後から追える）
       sb.from('shift_logs').insert(logRow({ type: 'SAVE_MASTER',

@@ -148,10 +148,14 @@
       return { media: m, key, no, store: r.store, name: x.name, rows: x.rows, error: x.error };
     };
     // お店・媒体ごとに別々のロボットが読むので、いっしょに読む（順番は targets のまま）
-    const plan = await Promise.all(jobs.map(j => one(j).catch(e => ({ media: j.m, disp: j.t && j.t.shop ? j.m + '（' + j.t.shop + '）' : '', error: String(e.message || e) })).then(p => {
+    const plan0 = await Promise.all(jobs.map(j => one(j).catch(e => ({ media: j.m, disp: j.t && j.t.shop ? j.m + '（' + j.t.shop + '）' : '', error: String(e.message || e) })).then(p => {
       nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${jobs.length}）</p>`; return p; })));
+    // ぴゅあらば・情報局で、まだIDを入れていないお店は「準備中」としてとばす（エラーにしない・✅ のじゃまをしない）
+    const idle = plan0.filter(p => MULTI[p.media] && /Secrets にありません/.test(p.error || ''));
+    const plan = plan0.filter(p => !idle.includes(p));
     await saveFoundNos(o, row, plan);
     paintPlan(modal, o, w, days, plan);
+    if(idle.length) body.insertAdjacentHTML('beforeend', `<p class="sub">⏸ IDがまだ入っていないので、とばしました：${idle.map(p => esc(p.disp || p.media)).join('、')}</p>`);
     return closed;
   }
 

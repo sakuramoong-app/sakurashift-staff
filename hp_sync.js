@@ -53,11 +53,23 @@
     }
     return castCache.find(c => c.shift_name === name) || castCache.find(c => c.official_name === name) || null;
   }
+  // ロボットを一度にたくさん起こすと「Function failed to start」になるので、同時に動かすのは4つまで。起きられなかったら少し待って1回やりなおす
+  let fnBusy = 0; const fnWait = [];
   async function callFn(body){
-    const { data, error } = await ShiftDB.client.functions.invoke('hp-shift-sync', { body });
-    let r = data;
-    if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
-    return r || { ok: false, error: '返事がありません' };
+    if(fnBusy >= 4) await new Promise(res => fnWait.push(res));
+    fnBusy++;
+    try{
+      for(let i = 0; ; i++){
+        const { data, error } = await ShiftDB.client.functions.invoke('hp-shift-sync', { body });
+        let r = data;
+        if(error){ try{ r = await error.context.json(); }catch(e){ r = { ok: false, error: error.message }; } }
+        r = r || { ok: false, error: '返事がありません' };
+        const msg = String(r.error || r.message || '');
+        const notStarted = /failed to start|BOOT_ERROR|WORKER_LIMIT/i.test(msg), readOnly = !/apply/.test(String(body.action || ''));   // 入れる（apply）は、起きられなかったときだけやりなおす
+        if(i < 1 && !r.ok && (notStarted || (readOnly && /Failed to send|503|546/i.test(msg)))){ await new Promise(res => setTimeout(res, 1500)); continue; }
+        return r;
+      }
+    }finally{ fnBusy--; const next = fnWait.shift(); if(next) next(); }
   }
   // その週のシフト → ロボットに渡す日ごとの予定（今日より前は入れない）
   function daysOf(w, wk){

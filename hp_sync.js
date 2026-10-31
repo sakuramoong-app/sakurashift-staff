@@ -28,12 +28,13 @@
   // ・お店ごとに別のID（Secrets：PURE_<お店>_ID・JOHO_<お店>_ID）。18・極門はダミー名で探す
   // ・キューティー・極門は、上の (キュ)(極) にもチェックがあればそちらで入れる（2回入れない）
   // ・入力チェックの ✅ は、その媒体のお店が全部うまく入ったときだけ
-  const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' } };
+  const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' },
+    'NHF': { media: 'nhf', label: 'NHF', not: ['極門'] } };   // not = その媒体にのっていないお店
   const SHOP_KEYS = Object.assign({}, HP_STORES, DUMMY_STORES);
   function multiSpecs(m, castStores){
     const t = MULTI[m];
     const covered = Object.entries(MEDIA).filter(([k, v]) => castStores.includes(k) && v.media === t.media).map(([, v]) => v.store);
-    return Object.entries(SHOP_KEYS).filter(([s, key]) => castStores.includes(s) && !covered.includes(key))
+    return Object.entries(SHOP_KEYS).filter(([s, key]) => castStores.includes(s) && !covered.includes(key) && !(t.not || []).includes(s))
       .map(([s, key]) => ({ media: t.media, store: key, label: t.label, alias: DUMMY_STORES[s] ? s : undefined, shop: s }));
   }
   // 自動で ✅ にする媒体（新しい記録簿を本番で使い始めたら '記録簿' を入れる。それまでは手でチェック）

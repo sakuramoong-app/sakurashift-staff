@@ -24,6 +24,18 @@
     '(極)ぴゅあらば': { media: 'pure', store: 'gokumon', label: 'ぴゅあらば', alias: '極門' },
     '(極)情報局': { media: 'joho', store: 'gokumon', label: '口コミ情報局', alias: '極門' },
   };
+  // 在籍しているお店ぜんぶに入れる媒体（2026/11/01〜）：キャスト管理で「ぴゅあらば」「情報局」にチェックした子は、その子のお店ごとに入れる
+  // ・お店ごとに別のID（Secrets：PURE_<お店>_ID・JOHO_<お店>_ID）。18・極門はダミー名で探す
+  // ・キューティー・極門は、上の (キュ)(極) にもチェックがあればそちらで入れる（2回入れない）
+  // ・入力チェックの ✅ は、その媒体のお店が全部うまく入ったときだけ
+  const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' } };
+  const SHOP_KEYS = Object.assign({}, HP_STORES, DUMMY_STORES);
+  function multiSpecs(m, castStores){
+    const t = MULTI[m];
+    const covered = Object.entries(MEDIA).filter(([k, v]) => castStores.includes(k) && v.media === t.media).map(([, v]) => v.store);
+    return Object.entries(SHOP_KEYS).filter(([s, key]) => castStores.includes(s) && !covered.includes(key))
+      .map(([s, key]) => ({ media: t.media, store: key, label: t.label, alias: DUMMY_STORES[s] ? s : undefined, shop: s }));
+  }
   // 自動で ✅ にする媒体（新しい記録簿を本番で使い始めたら '記録簿' を入れる。それまでは手でチェック）
   const AUTO_MEDIA = [];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -80,9 +92,11 @@
     let autoN = 0;
     AUTO_MEDIA.filter(m => castStores.includes(m)).forEach(m => { autoN += check(o, w, o.wk, m, days); });
     if(autoN && o.after) await o.after();
-    const targets = Object.keys(HP_STORES).concat(Object.keys(DUMMY_STORES), Object.keys(MEDIA)).filter(m => castStores.includes(m));
+    const targets = Object.keys(HP_STORES).concat(Object.keys(DUMMY_STORES), Object.keys(MEDIA), Object.keys(MULTI)).filter(m => castStores.includes(m));
+    // 読む・入れる単位：お店・媒体ごと（ぴゅあらば・情報局は、その子のお店の数だけ）
+    const jobs = targets.flatMap(m => MULTI[m] ? multiSpecs(m, castStores).map(t => ({ m, t })) : [{ m, t: MEDIA[m] }]);
     if(!days.length){ say('今日より前の週なので、入れる日がありません'); return; }
-    if(!targets.length){ say(o.cast + 'さんは、公式HP・媒体のチェック欄（入れる先）がありません'); return; }
+    if(!jobs.length){ say(o.cast + 'さんは、公式HP・媒体のチェック欄（入れる先）がありません'); return; }
     const modal = openModal(o);
     const closed = new Promise(res => { modal._done = res; });   // 閉じるまで待つ（一括のときは1人ずつ順番に）
     const body = modal.querySelector('.hp-body');
@@ -91,17 +105,18 @@
     const wdays = days.map(({ rest, ...d }) => d);
     let nDone = 0;
     body.innerHTML = `<p>公式HP・媒体を読んでいます…（お店はいっしょに読むので、1分ほど）</p>`;
-    const one = async m => {
-      if(MEDIA[m]){   // 媒体：媒体の出勤表の名前で探す（極門はダミー名）
-        const t = MEDIA[m], alias = t.alias ? ((Store.getCastAlias ? Store.getCastAlias(o.cast, t.alias) : '') || '') : '';
-        if(t.alias && !alias) return { media: m, kind: t.media, key: t.store, error: 'キャスト管理に' + t.alias + 'のダミー名が入っていないので入れません' };
+    const one = async ({ m, t }) => {
+      if(t){   // 媒体：媒体の出勤表の名前で探す（18・極門はダミー名）
+        const disp = t.shop ? m + '（' + t.shop + '）' : '';
+        const alias = t.alias ? ((Store.getCastAlias ? Store.getCastAlias(o.cast, t.alias) : '') || '') : '';
+        if(t.alias && !alias) return { media: m, disp, kind: t.media, key: t.store, error: 'キャスト管理に' + t.alias + 'のダミー名が入っていないので入れません' };
         // 媒体の名前は公式HPと同じ → キャスト台帳の「そのお店の公式HPでの名前」→ 正式名 → サクラシフトの名前 の順に試す
         const st = row && row.stores && row.stores[t.store];
         const names = alias ? [alias] : [st && st.name, row && row.official_name, o.cast, ...Object.entries((row && row.stores) || {}).filter(([k]) => k !== 'eighteen' && k !== 'gokumon').map(([, x]) => x && x.name)].filter(Boolean);   // 最後に、ほかのお店での名前も（ダミー名のお店はのぞく：別の子に入らないように）
         const name = names[0];
         const r = await callFn({ action: 'media_preview', media: t.media, store: t.store, casts: [{ cast: o.cast, name, names, label: o.cast + (alias ? '（' + alias + '）' : ''), days: wdays }] });
-        if(!r.ok) return { media: m, kind: t.media, key: t.store, alias, error: r.error || r.message || r.code || '読めませんでした' };
-        return { media: m, kind: t.media, key: t.store, store: r.store, name: r.name, mname: r.name || name, rows: r.rows, alias };
+        if(!r.ok) return { media: m, disp, kind: t.media, key: t.store, alias, error: r.error || r.message || r.code || '読めませんでした' };
+        return { media: m, disp, kind: t.media, key: t.store, store: r.store, name: r.name, mname: r.name || name, rows: r.rows, alias };
       }
       if(DUMMY_STORES[m]){   // エイティーン・極門：ダミー名で探す
         const key = DUMMY_STORES[m], alias = (Store.getCastAlias ? Store.getCastAlias(o.cast, m) : '') || '';
@@ -133,8 +148,8 @@
       return { media: m, key, no, store: r.store, name: x.name, rows: x.rows, error: x.error };
     };
     // お店・媒体ごとに別々のロボットが読むので、いっしょに読む（順番は targets のまま）
-    const plan = await Promise.all(targets.map(m => one(m).catch(e => ({ media: m, error: String(e.message || e) })).then(p => {
-      nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${targets.length}）</p>`; return p; })));
+    const plan = await Promise.all(jobs.map(j => one(j).catch(e => ({ media: j.m, disp: j.t && j.t.shop ? j.m + '（' + j.t.shop + '）' : '', error: String(e.message || e) })).then(p => {
+      nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${jobs.length}）</p>`; return p; })));
     await saveFoundNos(o, row, plan);
     paintPlan(modal, o, w, days, plan);
     return closed;
@@ -211,12 +226,12 @@
     let nChange = 0;
     body.innerHTML = plan.map((p, pi) => {
       // 同じ名前が何人もいる → 内勤が番号を選ぶ（選んだ番号は覚えておく）
-      if(p.candidates && p.candidates.length) return `<div class="st">${esc(p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>
+      if(p.candidates && p.candidates.length) return `<div class="st">${esc(p.disp || p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>
         <div style="background:#FFF6D6;border-radius:10px;padding:8px 10px;margin:4px 0 8px">
           <div style="font-size:12.5px;margin-bottom:6px">${esc(o.cast)}さん（ダミー名「${esc(p.alias)}」）は、管理画面のどの番号の子ですか？ 選んだ番号は覚えておくので、次からは自動で入ります。</div>
           ${p.candidates.map(c => `<label style="display:block;font-size:13.5px;padding:2px 0"><input type="radio" name="pick${pi}" value="${c.no}"> ${esc(c.no)}番 ${esc(c.name)} ${c.onHp ? '<span class="hp-ok">（公式HPに出ている）</span>' : '<span style="color:#8a97a3">（公式HPには出ていない）</span>'}</label>`).join('')}
           <button type="button" class="go" style="margin-top:6px;padding:7px 14px;font-size:13px" data-pick="${pi}">この番号に決める</button></div>`;
-      if(p.error) return `<div class="st">${esc(p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>`;
+      if(p.error) return `<div class="st">${esc(p.disp || p.media)}</div><div class="hp-ng">⚠️ ${esc(p.error)}</div>`;
       const ch = p.rows.filter(z => z.change && !z.problem && !z.skip).length; nChange += ch;
       return `<div class="st">${esc(p.store || p.media)} <small style="color:#8a97a3">（${p.kind ? '' : '公式HP ' + esc(p.no) + ' '}${esc(p.name)}）</small> ${ch ? `<span class="hp-ng">${ch}日 変わる</span>` : '<span class="hp-ok">同じ（変わらない）</span>'}
         ${p.picked ? `<a href="javascript:void(0)" data-repick="${pi}" style="font-size:12px;color:#C71585;margin-left:6px">番号を選びなおす</a>` : ''}</div>
@@ -281,12 +296,17 @@
         // 入れたお店（問題のある日がないとき）は、入力チェックに自動で ✅
         const probs = p.rows.filter(z => z.problem || z.skip).length;
         let checked = 0;
-        if(ok && !probs) checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, p.media, days);
+        if(ok && !probs && !MULTI[p.media]) checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, p.media, days);   // ぴゅあらば・情報局は下で（お店が全部うまくいったときだけ）
         res.push({ p, ok, msg, probs, checked });
       }
+      Object.keys(MULTI).forEach(m => {
+        const mine = res.filter(x => x.p.media === m);
+        if(!mine.length || plan.some(p => p.media === m && p.error) || !mine.every(x => x.ok && !x.probs)) return;
+        mine[mine.length - 1].checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, m, days);
+      });
       if(o.after) await o.after();
       body.innerHTML = res.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}">${x.ok ? '✅' : '❌'} ${esc(x.p.store || x.p.media)}：${esc(x.msg)}${x.checked ? `（入力チェック ${x.checked}日 ✅）` : ''}${x.probs ? `<br><span class="hp-ng">⚠️ 入れられない日があるので、入力チェックはつけていません。手で入れてください</span>` : ''}</div>`).join('')
-        + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.media)}：${esc(p.error)}</div>`).join('');
+        + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.disp || p.media)}：${esc(p.error)}</div>`).join('');
       go.remove();
       const close = modal.querySelector('[data-close]'); close.textContent = '閉じる'; close.className = 'go';
       refreshAlerts();   // 失敗があれば、受信ボックスの上の警告に出す

@@ -29,7 +29,7 @@
   // ・キューティー・極門は、上の (キュ)(極) にもチェックがあればそちらで入れる（2回入れない）
   // ・入力チェックの ✅ は、その媒体のお店が全部うまく入ったときだけ
   const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' },
-    'NHF': { media: 'nhf', label: 'NHF', not: ['極門'] } };   // not = その媒体にのっていないお店
+    'NHF': { media: 'nhf', label: 'NHF', not: ['極門', 'ドレスガーデン'] } };   // not = その媒体にのっていないお店
   const SHOP_KEYS = Object.assign({}, HP_STORES, DUMMY_STORES);
   function multiSpecs(m, castStores){
     const t = MULTI[m];
@@ -354,7 +354,8 @@
         const d0 = c.days && c.days[0] && c.days[0].date;
         const key = r.store_key + '|' + cast + '|' + (d0 ? mondayOf(d0) : '');
         if(seen.has(key)) return; seen.add(key);   // いちばん新しい記録だけ見る
-        if(r.ok === false) alertRows.push(Object.assign({}, r, { cast, wk: d0 ? mondayOf(d0) : '' }));
+        // 「出勤画面にない日（28日先まで）」だけの失敗は、日が近づけば入れられるので警告にしない（前のロボットの記録）
+        if(r.ok === false && !/出勤画面にない日です[^／]*28日先まで/.test(String(r.error_text || '')) ) alertRows.push(Object.assign({}, r, { cast, wk: d0 ? mondayOf(d0) : '' }));
       });
       paintAlerts();
     }catch(e){}

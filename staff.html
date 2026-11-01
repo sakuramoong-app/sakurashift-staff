@@ -2450,6 +2450,7 @@ const StaffApp = (function(){
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(castName,wk);
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
+      if(w.status==='unsubmitted') continue;   // 未提出の週（キャストが書きかけ）は数えない
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
       const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked) return true;
@@ -2470,6 +2471,7 @@ const StaffApp = (function(){
       const wk=weekKeyOf(ds);
       const w=Store.getWeek(castName,wk);
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
+      if(w.status==='unsubmitted') continue;   // 未提出の週（キャストが書きかけ）は数えない
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
       const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
       if(!allChecked) return ds;

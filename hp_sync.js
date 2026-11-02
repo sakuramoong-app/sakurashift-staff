@@ -3,7 +3,7 @@
    ------------------------------------------------------------
    1. 受理したら、そのキャストの在籍店舗の公式HPを読んで「この内容で公式HPに入れますか？」を出す
    2. 「入れる」→ ロボット（Supabase の hp-shift-sync）が管理画面に保存して『更新』まで
-   3. うまく入ったお店は、入力チェックに自動で ✅（記録簿は、新しい記録簿を本番で使い始めるまで手でチェック）
+   3. うまく入ったお店は、入力チェックに自動で ✅（記録簿は受理した時点で自動で ✅）
    ※ ヘブン（サクラ・ラナ）・ぴゅあらば／口コミ情報局（キューティー・極門）も、媒体の出勤表の名前で探して入れる（10/22〜）
    ※ エイティーン・極門は、キャスト管理に入っているダミー名で管理画面のキャストを探して入れる（ダミー名がない子は入れない）
    ============================================================ */
@@ -37,8 +37,8 @@
     return Object.entries(SHOP_KEYS).filter(([s, key]) => castStores.includes(s) && !covered.includes(key) && !(t.not || []).includes(s))
       .map(([s, key]) => ({ media: t.media, store: key, label: t.label, alias: DUMMY_STORES[s] ? s : undefined, shop: s }));
   }
-  // 自動で ✅ にする媒体（新しい記録簿を本番で使い始めたら '記録簿' を入れる。それまでは手でチェック）
-  const AUTO_MEDIA = [];
+  // 自動で ✅ にする媒体（新しい記録簿は 2026/11/3 から本番）
+  const AUTO_MEDIA = ['記録簿'];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const DOW = '日月火水木金土';
   const md = ds => { const d = new Date(ds + 'T12:00:00'); return (d.getMonth() + 1) + '/' + d.getDate() + '(' + DOW[d.getDay()] + ')'; };
@@ -101,7 +101,7 @@
     if(!w){ say('この週のシフトが見つかりませんでした'); return; }
     const castStores = Store.getCastStores(o.cast) || [];
     const days = daysOf(w, o.wk);
-    // AUTO_MEDIA の媒体は受理した時点で自動 ✅（今はなし）
+    // AUTO_MEDIA の媒体は受理した時点で自動 ✅（記録簿）
     let autoN = 0;
     AUTO_MEDIA.filter(m => castStores.includes(m)).forEach(m => { autoN += check(o, w, o.wk, m, days); });
     if(autoN && o.after) await o.after();

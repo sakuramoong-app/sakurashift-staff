@@ -30,7 +30,8 @@
   // ・入力チェックの ✅ は、その媒体のお店が全部うまく入ったときだけ
   const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' },
     'NHF': { media: 'nhf', label: 'NHF', not: ['極門', 'ドレスガーデン'] },
-    'マンゾク': { media: 'manzoku', label: 'マンゾク', not: ['ドレスガーデン', 'キューティー', '極門'] } };   // マンゾク（2026/11/22）   // not = その媒体にのっていないお店
+    'マンゾク': { media: 'manzoku', label: 'マンゾク', not: ['ドレスガーデン', 'キューティー', '極門'] },   // マンゾク（2026/11/22）
+    '駅チカ': { media: 'ekichika', label: '駅チカ', not: ['ラナ鶯谷', 'キューティー', '18', '極門'] } };   // 駅チカ（2026/11/22）   // not = その媒体にのっていないお店
   const SHOP_KEYS = Object.assign({}, HP_STORES, DUMMY_STORES);
   function multiSpecs(m, castStores){
     const t = MULTI[m];

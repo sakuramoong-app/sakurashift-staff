@@ -1302,10 +1302,10 @@ const SettingsApp = (function(){
       const aliasRows = aliasStores.map(s=>`
         <div class="alias-row">
           <span class="alias-label">${esc(s)}での名前</span>
-          <input class="alias-input" value="${esc(Store.getCastAlias(c.name,s))}" placeholder="源氏名"
-            onchange="SettingsApp.setAlias('${esc(c.name)}','${esc(s)}',this.value)">
+          <input class="alias-input" value="${esc(Store.getCastAlias(c.name,s))}" placeholder="（なし）" readonly title="キャスト台帳の「🎭 18・極門のダミー名」で入れます" style="background:#F4F1F2;color:#555"
+            >
         </div>`).join('');
-      const aliasPanel = aliasRows ? `<div class="alias-panel"><div class="store-panel-title">🎭 店舗別の名前</div>${aliasRows}</div>` : '';
+      const aliasPanel = aliasRows ? `<div class="alias-panel"><div class="store-panel-title">🎭 店舗別の名前（見るだけ。入れる・直すのはキャスト台帳の「🎭 18・極門のダミー名」）</div>${aliasRows}</div>` : '';
       return `
       <div class="cast-block">
         <div class="cast-row">

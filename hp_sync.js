@@ -29,7 +29,8 @@
   // ・キューティー・極門は、上の (キュ)(極) にもチェックがあればそちらで入れる（2回入れない）
   // ・入力チェックの ✅ は、その媒体のお店が全部うまく入ったときだけ
   const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' },
-    'NHF': { media: 'nhf', label: 'NHF', not: ['極門', 'ドレスガーデン'] } };   // not = その媒体にのっていないお店
+    'NHF': { media: 'nhf', label: 'NHF', not: ['極門', 'ドレスガーデン'] },
+    'マンゾク': { media: 'manzoku', label: 'マンゾク', not: ['ドレスガーデン', 'キューティー', '極門'] } };   // マンゾク（2026/11/22）   // not = その媒体にのっていないお店
   const SHOP_KEYS = Object.assign({}, HP_STORES, DUMMY_STORES);
   function multiSpecs(m, castStores){
     const t = MULTI[m];

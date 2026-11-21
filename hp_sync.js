@@ -162,7 +162,11 @@
       return { media: m, key, no, store: r.store, name: x.name, rows: x.rows, error: x.error };
     };
     // お店・媒体ごとに別々のロボットが読むので、いっしょに読む（順番は targets のまま）
-    const plan0 = await Promise.all(jobs.map(j => one(j).catch(e => ({ media: j.m, disp: j.t && j.t.shop ? j.m + '（' + j.t.shop + '）' : '', error: String(e.message || e) })).then(p => {
+    // マンゾクだけは1店ずつ順番に（同じIDのお店が同時にログインすると、前のほうが追い出される。11/22 ラナ鶯谷・錦糸町）
+    let mzChain = Promise.resolve();
+    const one0 = one;
+    const oneSeq = j => { if(j.t && j.t.media === 'manzoku'){ const p = mzChain.then(() => one0(j)); mzChain = p.catch(() => {}); return p; } return one0(j); };
+    const plan0 = await Promise.all(jobs.map(j => oneSeq(j).catch(e => ({ media: j.m, disp: j.t && j.t.shop ? j.m + '（' + j.t.shop + '）' : '', error: String(e.message || e) })).then(p => {
       nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${jobs.length}）</p>`; return p; })));
     // ぴゅあらば・情報局で、まだIDを入れていないお店は「準備中」としてとばす（エラーにしない・✅ のじゃまをしない）
     const idle = plan0.filter(p => MULTI[p.media] && /Secrets にありません/.test(p.error || ''));

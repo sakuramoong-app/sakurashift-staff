@@ -386,7 +386,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="shift_db.js"></script>
-<script src="hp_sync.js?v=2"></script>
+<script src="hp_sync.js?v=3"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -3071,8 +3071,15 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   }
 
   // ★ 受理したら、公式HPに自動で入れるか聞く（hp_sync.js）。記録簿は自動で ✅
+  // 🌐 入れる待ちの「まとめて入れる」が使う：だれが入れたか・入れたあとの描きなおしと保存
+  if(window.HpSync) HpSync.ctx = () => ({ by: staffName, color: staffColor(staffName), after: async()=>{ renderAll(); await saveNow(); } });
   async function offerHp(list){
     if(!window.HpSync) return;
+    // 受理したとき（ボタンで開いたとき以外）は、小窓を出さずに「🌐 入れる待ち」にためる（2026/11/22。SQL 940 がまだなら今までどおり小窓）
+    const queued = list.filter(it => !it.manual);
+    if(queued.length && HpSync.enqueue){
+      try{ if(await HpSync.enqueue(queued)){ toast(`🌐 ${queued.length}人を「入れる待ち」に入れました（上の「まとめて入れる」で入ります）`); list = list.filter(it => it.manual); } }catch(e){}
+    }
     for(const it of list){
       try{ await HpSync.offer({ cast: it.cast, wk: it.wk, manual: !!it.manual, by: staffName, color: staffColor(staffName), after: async()=>{ renderAll(); await saveNow(); } }); }
       catch(e){ toast('公式HPの自動反映でエラー：' + (e.message || e)); }

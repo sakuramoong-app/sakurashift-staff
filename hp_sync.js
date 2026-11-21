@@ -115,7 +115,7 @@
     const closed = new Promise(res => { modal._done = res; });   // 閉じるまで待つ（一括のときは1人ずつ順番に）
     const body = modal.querySelector('.hp-body');
     let row;
-    try{ row = await castRow(o.cast); }catch(e){ body.innerHTML = `<p class="hp-ng">キャスト台帳を読めませんでした：${esc(e.message || e)}</p>`; return closed; }
+    try{ row = await castRow(o.cast); }catch(e){ body.innerHTML = `<p class="hp-ng">キャスト台帳を読めませんでした：${esc(e.message || e)}</p>`; if(o.auto){ modal.remove(); return { ok: false, text: ["⚠️ キャスト台帳を読めませんでした"] }; } return closed; }
     const wdays = days.map(({ rest, ...d }) => d);
     let nDone = 0;
     body.innerHTML = `<p>公式HP・媒体を読んでいます…（お店はいっしょに読むので、1分ほど）</p>`;
@@ -170,6 +170,15 @@
     await saveFoundNos(o, row, plan);
     paintPlan(modal, o, w, days, plan);
     if(idle.length) body.insertAdjacentHTML('beforeend', `<p class="sub">⏸ IDがまだ入っていないので、とばしました：${idle.map(p => esc(p.disp || p.media)).join('、')}</p>`);
+    // 🌐 まとめて入れる（o.auto）：確認しないで「入れる」を押して、終わったら小窓を閉じる（2026/11/22 店長）
+    if(o.auto){
+      const go = modal.querySelector('.btns .go');
+      if(go && go.onclick) await go.onclick();
+      const ng = body.querySelectorAll('.hp-ng').length + plan.filter(p => p.error).length;
+      const text = [...body.querySelectorAll('.hp-ok,.hp-ng')].map(x => x.textContent.trim()).filter(Boolean);
+      modal.remove(); if(modal._done) modal._done();
+      return { ok: !ng, text };
+    }
     return closed;
   }
 
@@ -389,5 +398,89 @@
   setTimeout(refreshAlerts, 3000);
   setInterval(refreshAlerts, 180000);   // 3分ごと（ほかの内勤が入れた結果も出る）
 
-  window.HpSync = { offer, HP_STORES, refreshAlerts };
+  /* ============================================================
+     🌐 入れる待ち（2026/11/22 店長）：受理しても小窓は出さず「入れる待ち」にためる（hp_sync_queue・SQL 940）
+     「🌐 まとめて入れる」で、1人ずつ順番に確認なしで入れる（変わるところだけ・入ったら自動 ✅）。終わったら結果の一覧
+     ※ 記録簿の ✅ は、ためた時点でつける（今までどおり受理したとき）
+     ============================================================ */
+  let queueRows = [], queueRunning = false, queueLog = [];
+  const ctx = () => (window.HpSync && HpSync.ctx ? HpSync.ctx() : {});
+  async function enqueue(list){
+    const c = ctx();
+    const rows = list.map(it => ({ cast_name: it.cast, wk: it.wk, added_by: c.by || '' }));
+    const { error } = await ShiftDB.client.from('hp_sync_queue').upsert(rows, { onConflict: 'cast_name,wk' });
+    if(error) return false;   // SQL 940 がまだ → 今までどおり小窓で
+    let autoN = 0;
+    for(const it of list){
+      const w = Store.getWeek(it.cast, it.wk); if(!w) continue;
+      const cs = Store.getCastStores(it.cast) || [], days = daysOf(w, it.wk);
+      AUTO_MEDIA.filter(m => cs.includes(m)).forEach(m => { autoN += check({ cast: it.cast, by: c.by || '', color: c.color || '' }, w, it.wk, m, days); });
+    }
+    if(autoN && c.after) await c.after();
+    await refreshQueue();
+    return true;
+  }
+  async function refreshQueue(){
+    try{
+      const { data, error } = await ShiftDB.client.from('hp_sync_queue').select('*').order('added_at');
+      if(error) return;
+      queueRows = data || [];
+      paintQueue();
+    }catch(e){}
+  }
+  function paintQueue(){
+    let box = document.getElementById('hpQueue');
+    const anchor = document.getElementById('hpAlert') || document.querySelector('.inbox-card');
+    if(!anchor) return;
+    if(!queueRows.length && !queueRunning && !queueLog.length){ if(box) box.remove(); return; }
+    if(!box){ box = document.createElement('div'); box.id = 'hpQueue'; anchor.parentNode.insertBefore(box, anchor); }
+    const wkTxt = wk => { const ds = weekDates(wk); return md(ds[0]) + '〜' + md(ds[6]); };
+    box.innerHTML = `<div style="background:#F3F0FF;border:2.5px solid #7C6CD8;border-radius:16px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:15px;font-weight:900;color:#4B3A8A">🌐 公式HP・媒体に入れる待ち（${queueRows.length}人）</div>
+        ${queueRows.length && !queueRunning ? `<button type="button" id="hpQueueGo" style="border:none;border-radius:12px;padding:9px 16px;background:linear-gradient(135deg,#9C8CF0,#6B5BB8);color:#fff;font-weight:900;cursor:pointer;font-family:inherit;font-size:14px">🌐 まとめて入れる</button>` : ''}
+        ${queueRunning ? `<b style="color:#6B5BB8">⏳ 入れています… ${esc(queueRunning)}（この画面を閉じないでください）</b>` : ''}
+      </div>
+      <div style="font-size:12px;color:#6B5B8A;margin:4px 0 6px">受理した週がここにたまります。「まとめて入れる」で、1人ずつ確認なしで入れます（1人1〜2分。入れているあいだは、この画面を開いたままにしてください）。</div>
+      ${queueRows.map((r, i) => `<span style="display:inline-flex;gap:6px;align-items:center;background:#fff;border:1.5px solid #D9D1FF;border-radius:99px;padding:3px 6px 3px 12px;margin:2px 4px 2px 0;font-size:13px">
+        <b>${esc(r.cast_name)}</b><small style="color:#8a97a3">${esc(wkTxt(r.wk))}</small>
+        ${queueRunning ? '' : `<a href="javascript:void 0" data-qone="${i}" title="この子だけ、確認しながら入れる" style="text-decoration:none">🔍</a><a href="javascript:void 0" data-qdel="${i}" title="待ちから外す" style="text-decoration:none;color:#9C8B8F">✕</a>`}</span>`).join('')}
+      ${queueLog.length ? `<div style="margin-top:8px;border-top:1px dashed #D9D1FF;padding-top:6px;font-size:12.5px">${queueLog.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}" style="color:${x.ok ? '#1f9d6b' : '#d9534f'};font-weight:800">${x.ok ? '✅' : '⚠️'} ${esc(x.cast)}（${esc(wkTxt(x.wk))}）${x.ok ? '' : '：' + esc(x.text.filter(t => /⚠️|❌/.test(t)).join(' ／ ') || 'うまく入らなかったところがあります')}</div>`).join('')}
+        ${queueRunning ? '' : `<a href="javascript:void 0" id="hpQueueClr" style="font-size:12px;color:#8a97a3">結果を消す</a>`}</div>` : ''}</div>`;
+    const g = box.querySelector('#hpQueueGo'); if(g) g.onclick = runQueue;
+    const cl = box.querySelector('#hpQueueClr'); if(cl) cl.onclick = () => { queueLog = []; paintQueue(); };
+    box.querySelectorAll('[data-qdel]').forEach(a => a.onclick = async () => {
+      const r = queueRows[+a.dataset.qdel]; if(!confirm(`${r.cast_name}（${wkTxt(r.wk)}）を「入れる待ち」から外しますか？\n（公式HP・媒体には入れません。入れるときは週のカードの 🌐 から）`)) return;
+      await ShiftDB.client.from('hp_sync_queue').delete().eq('cast_name', r.cast_name).eq('wk', r.wk); refreshQueue();
+    });
+    box.querySelectorAll('[data-qone]').forEach(a => a.onclick = async () => {
+      const r = queueRows[+a.dataset.qone], c = ctx();
+      await offer({ cast: r.cast_name, wk: r.wk, manual: true, by: c.by, color: c.color, after: c.after });
+      await ShiftDB.client.from('hp_sync_queue').delete().eq('cast_name', r.cast_name).eq('wk', r.wk); refreshQueue();
+    });
+  }
+  async function runQueue(){
+    if(queueRunning) return;
+    await refreshQueue();
+    const list = queueRows.slice(); if(!list.length) return;
+    if(!confirm(`${list.length}人を、確認なしで公式HP・媒体に入れます。\n終わるまで、この画面を開いたままにしてください（1人1〜2分）。`)) return;
+    queueLog = [];
+    for(let i = 0; i < list.length; i++){
+      const r = list[i], c = ctx();
+      queueRunning = `${i + 1}／${list.length}人目：${r.cast_name}`; paintQueue();
+      let res;
+      try{ res = await offer({ cast: r.cast_name, wk: r.wk, auto: true, by: c.by, color: c.color, after: c.after }); }
+      catch(e){ res = { ok: false, text: ['⚠️ ' + (e.message || e)] }; }
+      if(!res) res = { ok: true, text: [] };   // 入れる先がない・今日より前の週
+      queueLog.push({ cast: r.cast_name, wk: r.wk, ok: res.ok, text: res.text || [] });
+      try{ await ShiftDB.client.from('hp_sync_queue').delete().eq('cast_name', r.cast_name).eq('wk', r.wk); }catch(e){}
+      queueRows = queueRows.filter(x => !(x.cast_name === r.cast_name && x.wk === r.wk));
+    }
+    queueRunning = false;
+    await refreshQueue(); refreshAlerts();
+  }
+  setTimeout(refreshQueue, 3500);
+  setInterval(() => { if(!queueRunning) refreshQueue(); }, 60000);   // ほかの内勤がためた分も出る
+
+  window.HpSync = { offer, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue };
 })();

@@ -31,7 +31,9 @@
   const MULTI = { 'ぴゅあらば': { media: 'pure', label: 'ぴゅあらば' }, '情報局': { media: 'joho', label: '口コミ情報局' },
     'NHF': { media: 'nhf', label: 'NHF', not: ['極門', 'ドレスガーデン'] },
     'マンゾク': { media: 'manzoku', label: 'マンゾク', not: ['ドレスガーデン', 'キューティー', '極門'] },   // マンゾク（2026/11/22）
-    '駅チカ': { media: 'ekichika', label: '駅チカ', not: ['ラナ鶯谷', 'キューティー', '18', '極門'] } };   // 駅チカ（2026/11/22）   // not = その媒体にのっていないお店
+    '駅チカ': { media: 'ekichika', label: '駅チカ', not: ['ラナ鶯谷', 'キューティー', '18', '極門'] },   // 駅チカ（2026/11/22）
+    '風じゃ': { media: 'fuja', label: '風俗じゃぱん', not: ['ラナ錦糸町', 'ピーチムーン', 'ドレスガーデン', 'キューティー', '極門'] },   // 風俗じゃぱん（2026/11/22）
+    'デリじゃ': { media: 'delija', label: 'デリヘルじゃぱん', not: ['ラナ鶯谷', 'ラナ錦糸町', 'ピーチムーン', 'ドレスガーデン', 'キューティー', '18', '逆AF倶楽部'] } };   // デリヘルじゃぱん（サクラ・極門だけ）   // not = その媒体にのっていないお店
   const SHOP_KEYS = Object.assign({}, HP_STORES, DUMMY_STORES);
   function multiSpecs(m, castStores){
     const t = MULTI[m];
@@ -166,7 +168,7 @@
     // マンゾクだけは1店ずつ順番に（同じIDのお店が同時にログインすると、前のほうが追い出される。11/22 ラナ鶯谷・錦糸町）
     let mzChain = Promise.resolve();
     const one0 = one;
-    const oneSeq = j => { if(j.t && j.t.media === 'manzoku'){ const p = mzChain.then(() => one0(j)); mzChain = p.catch(() => {}); return p; } return one0(j); };
+    const oneSeq = j => { if(j.t && ['manzoku', 'fuja', 'delija'].includes(j.t.media)){ const p = mzChain.then(() => one0(j)); mzChain = p.catch(() => {}); return p; } return one0(j); };
     const plan0 = await Promise.all(jobs.map(j => oneSeq(j).catch(e => ({ media: j.m, disp: j.t && j.t.shop ? j.m + '（' + j.t.shop + '）' : '', error: String(e.message || e) })).then(p => {
       nDone++; body.innerHTML = `<p>公式HP・媒体を読んでいます…（${nDone}／${jobs.length}）</p>`; return p; })));
     // ぴゅあらば・情報局で、まだIDを入れていないお店は「準備中」としてとばす（エラーにしない・✅ のじゃまをしない）

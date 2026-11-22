@@ -489,5 +489,7 @@
   setTimeout(refreshQueue, 3500);
   setInterval(() => { if(!queueRunning) refreshQueue(); }, 60000);   // ほかの内勤がためた分も出る
 
-  window.HpSync = { offer, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue };
+  // いま「入れる待ち」に人がいる・入れている途中・確認の小窓が開いている → 新しく受理した子は待ちにためる（2026/11/22 店長）
+  const busy = () => queueRows.length > 0 || !!queueRunning || !!document.querySelector('.hp-modal');
+  window.HpSync = { offer, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue, busy };
 })();

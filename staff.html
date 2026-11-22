@@ -386,7 +386,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="shift_db.js"></script>
-<script src="hp_sync.js?v=6"></script>
+<script src="hp_sync.js?v=7"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -3076,7 +3076,12 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   async function offerHp(list){
     if(!window.HpSync) return;
     // 受理したとき（ボタンで開いたとき以外）は、小窓を出さずに「🌐 入れる待ち」にためる（2026/11/22。SQL 940 がまだなら今までどおり小窓）
-    const queued = list.filter(it => !it.manual);
+    // 11/22 店長：1人・1週だけ受理して、ほかに待ちがない・入れている途中でもない → 今までどおりすぐ小窓
+    //   まとめて受理（2週以上・2人以上）や、待ちに人がいる・小窓が開いているとき（立て続け）→ 入れる待ちにためる
+    const queued0 = list.filter(it => !it.manual);
+    let single = false;
+    if(queued0.length === 1 && HpSync.busy){ try{ if(HpSync.refreshQueue) await HpSync.refreshQueue(); }catch(e){} single = !HpSync.busy(); }
+    const queued = single ? [] : queued0;
     if(queued.length && HpSync.enqueue){
       try{ if(await HpSync.enqueue(queued)){ toast(`🌐 ${queued.length}人を「入れる待ち」に入れました（上の「まとめて入れる」で入ります）`); list = list.filter(it => it.manual); } }catch(e){}
     }

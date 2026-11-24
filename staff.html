@@ -1019,7 +1019,10 @@ const Store = (function(){
   function _ensureWeek(cast, wk){
     if(!state.weeks[cast]) state.weeks[cast] = {};
     if(!state.weeks[cast][wk]) state.weeks[cast][wk] = emptyWeek();
-    return state.weeks[cast][wk];
+    const w = state.weeks[cast][wk];
+    // 2026/11/25：データに checks がない週（キャストのアプリだけで作った週など）でも ✅ をつけられるように
+    if(!w.checks || typeof w.checks !== 'object') w.checks = {};
+    return w;
   }
 
   function _touch(cast, wk, by){

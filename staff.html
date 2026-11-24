@@ -386,7 +386,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="shift_db.js"></script>
-<script src="hp_sync.js?v=9"></script>
+<script src="hp_sync.js?v=10"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -425,7 +425,7 @@
       <input class="search-input" id="searchInput" placeholder="🔍 キャスト名で検索" oninput="StaffApp.setSearch(this.value)">
       <button class="filter-chip active" data-f="all" onclick="StaffApp.setFilter('all')">すべて</button>
       <button class="filter-chip" data-f="today" onclick="StaffApp.setFilter('today')">本日入力可能</button>
-      <button class="btn btn-soft" id="todayBulkBtn" style="display:none;color:#6B5BB8;font-weight:900" onclick="StaffApp.bulkTodayHp()" title="本日入力可能の子を、確認なしで公式HP・媒体にまとめて入れます">🌐 本日入力可能をまとめて入れる</button>
+      <button class="btn btn-soft" id="todayBulkBtn" style="color:#6B5BB8;font-weight:900" onclick="StaffApp.bulkTodayHp()" title="受理ずみで、まだ公式HP・媒体に入れていない週（来月末まで）を、確認なしでまとめて入れます">🌐 まだ入れていない分をまとめて入れる</button>
       <button class="filter-chip" data-f="change" onclick="StaffApp.setFilter('change')">変更申請中</button>
       <button class="btn btn-soft" id="hideRestBtn" onclick="StaffApp.toggleHideRest()">🌸 休日を隠す</button>
       <div class="month-nav">
@@ -3617,20 +3617,29 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   }
   function setSearch(q){ searchQuery=(q||'').trim(); renderCastList(); }
   // ★ 2026/11/25 店長：本日入力可能の子（受理ずみの週だけ）を「入れる待ち」にためて、まとめて入れる
+  // ★ 2026/11/25 店長「今処理されていないものをまとめてやりたい」：今日〜来月末まで、受理ずみで ✅ がない日がある週ぜんぶ
+  //   公式HP・ヘブンなど先の日も入れられる所は来月末まで。口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日 はその先まで
+  function _bulkEndDays(){
+    const t=new Date(); t.setHours(0,0,0,0);
+    const end=new Date(t.getFullYear(), t.getMonth()+2, 0);   // 来月の末日
+    return Math.round((end-t)/864e5)+1;
+  }
   function _todayOpenWeeks(){
     const todayD=new Date(); todayD.setHours(0,0,0,0);
+    const span=_bulkEndDays();
     const out=[], notYet=[];
     Store.getCastList().forEach(c=>{
-      if(!_hasUncheckedToday(c.name)) return;
       const castStores=Store.getCastStores(c.name);
       const dayStores=STORES.filter(m=>castStores.includes(m) && m!=='記録簿');   // 記録簿は受理したときに自動 ✅
+      if(!dayStores.length) return;
       const wks=new Set();
-      for(let i=0;i<TODAY_EDITABLE_DAYS;i++){
+      for(let i=0;i<span;i++){
         const d=new Date(todayD); d.setDate(todayD.getDate()+i);
         const ds=ymd(d), wk=weekKeyOf(ds), w=Store.getWeek(c.name,wk);
         if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
         const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-        if(!_dsStores.length || !_dayHasOpenUnchecked(w, ds, i, _dsStores)) continue;
+        const open=_dsStores.some(m=>i<(MEDIA_EDITABLE_DAYS[m]||span) && !(w.checks && w.checks[ds+'_'+m] && w.checks[ds+'_'+m].checked));
+        if(!open) continue;
         // 受理したあとの週（入力待ち・内勤入力中・変更入力中・確定）は入れる。提出済み（まだ受理していない）・変更申請中は入れない
         if(['input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) wks.add(wk);
         else if(w.status!=='unsubmitted' && !notYet.includes(c.name)) notYet.push(c.name);
@@ -3641,20 +3650,28 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   }
   async function bulkTodayHp(){
     if(!window.HpSync || !HpSync.enqueue || !HpSync.runQueue){ toast('公式HPの自動反映が読み込めていません'); return; }
+    // 今月・来月のシフトを読む（いま見ている月以外の週も見られるように。読んだ週は足すだけ）
+    setBusy(true,'今月・来月のシフトを読んでいます…');
+    try{
+      const t=new Date(), ym=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      for(const m of [ym(t), ym(new Date(t.getFullYear(), t.getMonth()+1, 1))]) await StaffGas.loadMonthAll(m);
+    }finally{ setBusy(false); }
     const { list, notYet } = _todayOpenWeeks();
     const nyTxt = notYet.length ? `\n\n※ まだ受理していない週（提出済み・変更申請中）の子は入れません：${notYet.join('・')}` : '';
-    if(!list.length){ alert('まとめて入れられる子はいません（受理ずみの週で、今日入れられる日がある子だけ入れます）' + nyTxt); return; }
+    if(!list.length){ alert('まとめて入れられる週はありません（受理ずみの週で、来月末までに ✅ がない日がある週を入れます）' + nyTxt); renderAll(); return; }
     const names=[...new Set(list.map(x=>x.cast))];
-    if(!confirm(`本日入力可能の ${names.length}人（${list.length}週）を「入れる待ち」に入れて、まとめて公式HP・媒体に入れます。\n\n${names.join('・')}${nyTxt}`)) return;
-    let ok=false;
-    try{ ok = await HpSync.enqueue(list); }catch(e){}
-    if(!ok){ toast('「入れる待ち」に入れられませんでした'); return; }
-    await HpSync.runQueue(true);
+    if(!confirm(`まだ入れていない ${names.length}人（${list.length}週・来月末まで）を「入れる待ち」に入れて、まとめて公式HP・媒体に入れます。\n\n${names.join('・')}${nyTxt}`)){ renderAll(); return; }
+    let ok=false, why='';
+    try{ ok = await HpSync.enqueue(list); if(!ok) why = HpSync.enqueue.lastError || ''; }catch(e){ why = e.message || String(e); }
+    // 待ちに入っていれば、記録簿の ✅ で止まっても先へ進む（理由は出す）
+    try{ if(HpSync.refreshQueue) await HpSync.refreshQueue(); }catch(e){}
+    if(!ok && why) alert('⚠️ 入れる待ちに入れるところで止まりました。この画面を店長に送ってください：\n' + why);
+    try{ await HpSync.runQueue(true); }catch(e){ alert('⚠️ まとめて入れるところで止まりました：\n' + (e.message || e)); }
+    renderAll();
     renderFilterChips();
   }
   function renderFilterChips(){
     const todayN = countFilter('today');
-    const bb=document.getElementById('todayBulkBtn'); if(bb) bb.style.display = todayN>0 ? '' : 'none';
     const waitN  = countFilter('waiting');
     const changeN= countFilter('change');
     document.querySelectorAll('.filter-chip').forEach(ch=>{

@@ -349,7 +349,7 @@
       // 入れられない日：媒体の画面にまだない日（情報局は28日先まで）だけなら「近くなったらもう一度」、ほかの理由なら「手で入れて」
       const probNote = p => { const bad = p.rows.filter(z => z.problem || z.skip), wait = bad.filter(z => /まだない日/.test(z.skip || ''));
         return wait.length === bad.length
-          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、この媒体にはまだ入れられない日です（媒体ごとに入れられる日の先が決まっています：口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日）。近くなったら「本日入力可能」に出るので、そのとき「🌐 本日入力可能をまとめて入れる」で入れてください</span>`
+          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、この媒体にはまだ入れられない日です（媒体ごとに入れられる日の先が決まっています：口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日）。近くなったら「本日入力可能」に出るので、そのとき「🌐 まだ入れていない分をまとめて入れる」で入れてください</span>`
           : `<br><span class="hp-ng">⚠️ 入れられない日（${bad.map(z => md(z.date)).join('・')}）は、入力チェックをつけていません。手で入れてください</span>`; };
       body.innerHTML = res.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}">${x.ok ? '✅' : '❌'} ${esc(x.p.store || x.p.media)}：${esc(x.msg)}${x.checked ? `（入力チェック ${x.checked}日 ✅）` : ''}${x.probs ? probNote(x.p) : ''}</div>`).join('')
         + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.disp || p.media)}：${esc(p.error)}</div>`).join('');
@@ -423,7 +423,7 @@
     const c = ctx();
     const rows = list.map(it => ({ cast_name: it.cast, wk: it.wk, added_by: c.by || '' }));
     const { error } = await ShiftDB.client.from('hp_sync_queue').upsert(rows, { onConflict: 'cast_name,wk' });
-    if(error) return false;   // SQL 940 がまだ → 今までどおり小窓で
+    if(error){ enqueue.lastError = error.message || String(error); return false; }   // SQL 940 がまだ → 今までどおり小窓で
     let autoN = 0;
     for(const it of list){
       const w = Store.getWeek(it.cast, it.wk); if(!w) continue;

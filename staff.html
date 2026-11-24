@@ -3628,7 +3628,8 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
         if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
         const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
         if(!_dsStores.length || !_dayHasOpenUnchecked(w, ds, i, _dsStores)) continue;
-        if(['confirmed','change_confirmed'].includes(w.status)) wks.add(wk);
+        // 受理したあとの週（入力待ち・内勤入力中・変更入力中・確定）は入れる。提出済み（まだ受理していない）・変更申請中は入れない
+        if(['input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) wks.add(wk);
         else if(w.status!=='unsubmitted' && !notYet.includes(c.name)) notYet.push(c.name);
       }
       wks.forEach(wk=>out.push({cast:c.name, wk}));
@@ -3638,7 +3639,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
   async function bulkTodayHp(){
     if(!window.HpSync || !HpSync.enqueue || !HpSync.runQueue){ toast('公式HPの自動反映が読み込めていません'); return; }
     const { list, notYet } = _todayOpenWeeks();
-    const nyTxt = notYet.length ? `\n\n※ まだ受理していない週の子は入れません：${notYet.join('・')}` : '';
+    const nyTxt = notYet.length ? `\n\n※ まだ受理していない週（提出済み・変更申請中）の子は入れません：${notYet.join('・')}` : '';
     if(!list.length){ alert('まとめて入れられる子はいません（受理ずみの週で、今日入れられる日がある子だけ入れます）' + nyTxt); return; }
     const names=[...new Set(list.map(x=>x.cast))];
     if(!confirm(`本日入力可能の ${names.length}人（${list.length}週）を「入れる待ち」に入れて、まとめて公式HP・媒体に入れます。\n\n${names.join('・')}${nyTxt}`)) return;

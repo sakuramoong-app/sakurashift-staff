@@ -83,6 +83,25 @@
       return s && s.start != null && s.end != null ? { date: ds, start: Number(s.start), end: Number(s.end) } : { date: ds, off: true, rest: typeof isChangedToRest === 'function' && isChangedToRest(w, ds) };
     });
   }
+  // 「まだ入れられない日」（媒体・公式HPの画面にまだその日の欄がない）
+  const WAIT_RE = /まだない日|の外なので/;
+  // ★ 2026/11/25 店長：ロボットが今日「まだ入れられない」と言った日・媒体は、今日のあいだは「本日入力可能」に数えない（翌日また出る）
+  //   このパソコンだけに覚える（localStorage）。キー＝キャスト|日付|媒体、中身＝その営業日
+  const HpWait = (() => {
+    const KEY = 'hpWait_v1';
+    let map = {};
+    try{ map = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }catch(e){ map = {}; }
+    const today = todayBiz();
+    Object.keys(map).forEach(k => { if(map[k] !== today) delete map[k]; });
+    const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(map)); }catch(e){} };
+    save();
+    return {
+      add(cast, media, dates){ const t = todayBiz(); dates.forEach(ds => { map[cast + '|' + ds + '|' + media] = t; }); save(); },
+      has(cast, ds, media){ return map[cast + '|' + ds + '|' + media] === todayBiz(); },
+    };
+  })();
+  window.HpWait = HpWait;
+  const waitDates = plans => { const s = new Set(); plans.forEach(p => (p.rows || []).forEach(z => { if(z.skip && WAIT_RE.test(z.skip)) s.add(z.date); })); return [...s]; };
   // 入れられなかった日（媒体の画面にまだない日・問題のある日）をのぞいた日
   function goodDays(days, plans){
     const bad = new Set();
@@ -188,7 +207,7 @@
       const go = modal.querySelector('.btns .go');
       if(go && go.onclick) await go.onclick();
       const ng = body.querySelectorAll('.hp-ng').length + plan.filter(p => p.error).length;
-      const text = [...body.querySelectorAll('.hp-ok,.hp-ng')].map(x => x.textContent.trim()).filter(Boolean);
+      const text = [...body.querySelectorAll(':scope > .hp-ok, :scope > .hp-ng')].map(x => x.textContent.trim()).filter(Boolean);
       modal.remove(); if(modal._done) modal._done();
       return { ok: !ng, text };
     }
@@ -338,18 +357,20 @@
         const probs = p.rows.filter(z => z.problem || z.skip).length;
         let checked = 0;
         if(ok && !MULTI[p.media]) checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, p.media, goodDays(days, [p]));   // ぴゅあらば・情報局は下で（お店が全部うまくいったときだけ）
+        if(!MULTI[p.media]){ const wd = waitDates([p]); if(wd.length) HpWait.add(o.cast, p.media, wd); }
         res.push({ p, ok, msg, probs, checked });
       }
       Object.keys(MULTI).forEach(m => {
         const mine = res.filter(x => x.p.media === m);
+        { const wd = waitDates(mine.map(x => x.p)); if(wd.length) HpWait.add(o.cast, m, wd); }
         if(!mine.length || plan.some(p => p.media === m && p.error) || !mine.every(x => x.ok)) return;
         mine[mine.length - 1].checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, m, goodDays(days, mine.map(x => x.p)));   // どのお店でも入った日だけ
       });
       if(o.after) await o.after();
       // 入れられない日：媒体の画面にまだない日（情報局は28日先まで）だけなら「近くなったらもう一度」、ほかの理由なら「手で入れて」
-      const probNote = p => { const bad = p.rows.filter(z => z.problem || z.skip), wait = bad.filter(z => /まだない日/.test(z.skip || ''));
+      const probNote = p => { const bad = p.rows.filter(z => z.problem || z.skip), wait = bad.filter(z => WAIT_RE.test(z.skip || ''));
         return wait.length === bad.length
-          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、この媒体にはまだ入れられない日です（媒体ごとに入れられる日の先が決まっています：口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日）。近くなったら「本日入力可能」に出るので、そのとき「🌐 まだ入れていない分をまとめて入れる」で入れてください</span>`
+          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、まだ入れられない日です（画面にまだその日の欄がありません。口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日・公式HPは5週ほど先まで）。近くなったら「本日入力可能」に出るので、そのとき「🌐 まだ入れていない分をまとめて入れる」で入れてください</span>`
           : `<br><span class="hp-ng">⚠️ 入れられない日（${bad.map(z => md(z.date)).join('・')}）は、入力チェックをつけていません。手で入れてください</span>`; };
       body.innerHTML = res.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}">${x.ok ? '✅' : '❌'} ${esc(x.p.store || x.p.media)}：${esc(x.msg)}${x.checked ? `（入力チェック ${x.checked}日 ✅）` : ''}${x.probs ? probNote(x.p) : ''}</div>`).join('')
         + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.disp || p.media)}：${esc(p.error)}</div>`).join('');

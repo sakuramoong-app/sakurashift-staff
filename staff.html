@@ -386,7 +386,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="shift_db.js"></script>
-<script src="hp_sync.js?v=10"></script>
+<script src="hp_sync.js?v=11"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -2374,7 +2374,9 @@ const StaffApp = (function(){
   const MEDIA_EDITABLE_DAYS = { '駅チカ':7, '風じゃ':14, 'デリじゃ':14, '情報局':28, '(キュ)情報局':28, '(極)情報局':28 };
   const _mediaOpenOn = (m, i) => i < (MEDIA_EDITABLE_DAYS[m] || TODAY_EDITABLE_DAYS);
   // その日（今日から i 日目）に、今日入れられるのに ✅ がない媒体があるか
-  const _dayHasOpenUnchecked = (w, ds, i, stores) => stores.some(m => _mediaOpenOn(m, i) && !(w.checks && w.checks[ds+'_'+m] && w.checks[ds+'_'+m].checked));
+  // cast があれば、ロボットが今日「まだ入れられない日」と言った日・媒体は数えない（翌日また出る。HpWait は hp_sync.js）
+  const _hpWaitToday = (cast, ds, m) => !!(cast && window.HpWait && HpWait.has(cast, ds, m));
+  const _dayHasOpenUnchecked = (w, ds, i, stores, cast) => stores.some(m => _mediaOpenOn(m, i) && !_hpWaitToday(cast, ds, m) && !(w.checks && w.checks[ds+'_'+m] && w.checks[ds+'_'+m].checked));
 
   async function _jumpToFirstEditable(name){
     const today = ymd(new Date());
@@ -2395,7 +2397,7 @@ const StaffApp = (function(){
       const sh=w.shifts&&w.shifts[ds];
       if((!sh||sh.start==null) && !isChangedToRest(w, ds)) continue;
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-      if(_dsStores.length>0 && _dayHasOpenUnchecked(w, ds, i, _dsStores)){ targetDs=ds; break; }
+      if(_dsStores.length>0 && _dayHasOpenUnchecked(w, ds, i, _dsStores, name)){ targetDs=ds; break; }
     }
 
     // ★ 未チェック日が別の月にあれば、その月へ自動で切り替えてから光らせる
@@ -2461,7 +2463,7 @@ const StaffApp = (function(){
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
       if(w.status==='unsubmitted') continue;   // 未提出の週（キャストが書きかけ）は数えない
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-      if(_dayHasOpenUnchecked(w, ds, i, _dsStores)) return true;
+      if(_dayHasOpenUnchecked(w, ds, i, _dsStores, castName)) return true;
     }
     return false;
   }
@@ -2481,7 +2483,7 @@ const StaffApp = (function(){
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
       if(w.status==='unsubmitted') continue;   // 未提出の週（キャストが書きかけ）は数えない
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-      if(_dayHasOpenUnchecked(w, ds, i, _dsStores)) return ds;
+      if(_dayHasOpenUnchecked(w, ds, i, _dsStores, castName)) return ds;
     }
     return null;
   }
@@ -3638,7 +3640,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
         const ds=ymd(d), wk=weekKeyOf(ds), w=Store.getWeek(c.name,wk);
         if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
         const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-        const open=_dsStores.some(m=>i<(MEDIA_EDITABLE_DAYS[m]||span) && !(w.checks && w.checks[ds+'_'+m] && w.checks[ds+'_'+m].checked));
+        const open=_dsStores.some(m=>i<(MEDIA_EDITABLE_DAYS[m]||span) && !_hpWaitToday(c.name, ds, m) && !(w.checks && w.checks[ds+'_'+m] && w.checks[ds+'_'+m].checked));
         if(!open) continue;
         // 受理したあとの週（入力待ち・内勤入力中・変更入力中・確定）は入れる。提出済み（まだ受理していない）・変更申請中は入れない
         if(['input_waiting','inputting','change_inputting','confirmed','change_confirmed'].includes(w.status)) wks.add(wk);

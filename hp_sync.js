@@ -83,6 +83,12 @@
       return s && s.start != null && s.end != null ? { date: ds, start: Number(s.start), end: Number(s.end) } : { date: ds, off: true, rest: typeof isChangedToRest === 'function' && isChangedToRest(w, ds) };
     });
   }
+  // 入れられなかった日（媒体の画面にまだない日・問題のある日）をのぞいた日
+  function goodDays(days, plans){
+    const bad = new Set();
+    plans.forEach(p => (p.rows || []).forEach(z => { if(z.problem || z.skip) bad.add(z.date); }));
+    return days.filter(d => !bad.has(d.date));
+  }
   // 入力チェックをつける（ロボットで入ったお店・記録簿）
   function check(o, w, wk, media, days){
     let n = 0;
@@ -327,23 +333,24 @@
               casts: [{ cast: o.cast, no: p.no, name: p.mname, label: o.cast, days: days.map(({ rest, ...d }) => d) }], results: [{ ok: true, changed: 0 }], ok: true, error_text: 'もう同じ内容でした（確認だけ）' }); }catch(e){}
           }
         }
-        // 入れたお店（問題のある日がないとき）は、入力チェックに自動で ✅
+        // 入れたお店は、入力チェックに自動で ✅
+        // 2026/11/25 店長：入れられなかった日（媒体の画面にまだない日・問題のある日）だけ ✅ をつけない。ほかの日はつける（前は1日でもあると全部つけなかった）
         const probs = p.rows.filter(z => z.problem || z.skip).length;
         let checked = 0;
-        if(ok && !probs && !MULTI[p.media]) checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, p.media, days);   // ぴゅあらば・情報局は下で（お店が全部うまくいったときだけ）
+        if(ok && !MULTI[p.media]) checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, p.media, goodDays(days, [p]));   // ぴゅあらば・情報局は下で（お店が全部うまくいったときだけ）
         res.push({ p, ok, msg, probs, checked });
       }
       Object.keys(MULTI).forEach(m => {
         const mine = res.filter(x => x.p.media === m);
-        if(!mine.length || plan.some(p => p.media === m && p.error) || !mine.every(x => x.ok && !x.probs)) return;
-        mine[mine.length - 1].checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, m, days);
+        if(!mine.length || plan.some(p => p.media === m && p.error) || !mine.every(x => x.ok)) return;
+        mine[mine.length - 1].checked = check(o, Store.getWeek(o.cast, o.wk), o.wk, m, goodDays(days, mine.map(x => x.p)));   // どのお店でも入った日だけ
       });
       if(o.after) await o.after();
       // 入れられない日：媒体の画面にまだない日（情報局は28日先まで）だけなら「近くなったらもう一度」、ほかの理由なら「手で入れて」
       const probNote = p => { const bad = p.rows.filter(z => z.problem || z.skip), wait = bad.filter(z => /まだない日/.test(z.skip || ''));
         return wait.length === bad.length
-          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、この媒体にはまだ入れられない日です（媒体ごとに入れられる日の先が決まっています：口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日）。近くなったら「本日入力可能」に出るので、そのときもう一度 🌐 で入れてください</span>`
-          : `<br><span class="hp-ng">⚠️ 入れられない日があるので、入力チェックはつけていません。手で入れてください</span>`; };
+          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、この媒体にはまだ入れられない日です（媒体ごとに入れられる日の先が決まっています：口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日）。近くなったら「本日入力可能」に出るので、そのとき「🌐 本日入力可能をまとめて入れる」で入れてください</span>`
+          : `<br><span class="hp-ng">⚠️ 入れられない日（${bad.map(z => md(z.date)).join('・')}）は、入力チェックをつけていません。手で入れてください</span>`; };
       body.innerHTML = res.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}">${x.ok ? '✅' : '❌'} ${esc(x.p.store || x.p.media)}：${esc(x.msg)}${x.checked ? `（入力チェック ${x.checked}日 ✅）` : ''}${x.probs ? probNote(x.p) : ''}</div>`).join('')
         + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.disp || p.media)}：${esc(p.error)}</div>`).join('');
       go.remove();
@@ -466,11 +473,11 @@
       await ShiftDB.client.from('hp_sync_queue').delete().eq('cast_name', r.cast_name).eq('wk', r.wk); refreshQueue();
     });
   }
-  async function runQueue(){
+  async function runQueue(noAsk){
     if(queueRunning) return;
     await refreshQueue();
     const list = queueRows.slice(); if(!list.length) return;
-    if(!confirm(`${list.length}人を、確認なしで公式HP・媒体に入れます。\n終わるまで、この画面を開いたままにしてください（1人1〜2分）。`)) return;
+    if(noAsk !== true && !confirm(`${list.length}人を、確認なしで公式HP・媒体に入れます。\n終わるまで、この画面を開いたままにしてください（1人1〜2分）。`)) return;
     queueLog = [];
     for(let i = 0; i < list.length; i++){
       const r = list[i], c = ctx();

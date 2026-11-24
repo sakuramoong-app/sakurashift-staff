@@ -386,7 +386,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/portal/session_guard.js"></script><!-- 退勤時刻で自動ログアウト -->
 <script src="shift_db.js"></script>
-<script src="hp_sync.js?v=8"></script>
+<script src="hp_sync.js?v=9"></script>
 </head>
 <body>
 <div class="loading-overlay" id="loadingOverlay">
@@ -425,6 +425,7 @@
       <input class="search-input" id="searchInput" placeholder="🔍 キャスト名で検索" oninput="StaffApp.setSearch(this.value)">
       <button class="filter-chip active" data-f="all" onclick="StaffApp.setFilter('all')">すべて</button>
       <button class="filter-chip" data-f="today" onclick="StaffApp.setFilter('today')">本日入力可能</button>
+      <button class="btn btn-soft" id="todayBulkBtn" style="display:none;color:#6B5BB8;font-weight:900" onclick="StaffApp.bulkTodayHp()" title="本日入力可能の子を、確認なしで公式HP・媒体にまとめて入れます">🌐 本日入力可能をまとめて入れる</button>
       <button class="filter-chip" data-f="change" onclick="StaffApp.setFilter('change')">変更申請中</button>
       <button class="btn btn-soft" id="hideRestBtn" onclick="StaffApp.toggleHideRest()">🌸 休日を隠す</button>
       <div class="month-nav">
@@ -2365,6 +2366,12 @@ const StaffApp = (function(){
   // 「本日入力可能」で見る範囲：今日から何日先まで（全媒体共通）
   // ※媒体ごとに入力可能日数は違うが、管理を単純にして誤判定を防ぐため一律にする
   const TODAY_EDITABLE_DAYS = 28;
+  // ★ 2026/11/25 店長：媒体ごとに「今日入れられる日」だけ数える（媒体の画面にまだない日は数えない。翌日1日ふえたらまた出る）
+  //   駅チカ＝今日から7日・風じゃ/デリじゃ＝14日・口コミ情報局＝28日（ほかは TODAY_EDITABLE_DAYS）
+  const MEDIA_EDITABLE_DAYS = { '駅チカ':7, '風じゃ':14, 'デリじゃ':14, '情報局':28, '(キュ)情報局':28, '(極)情報局':28 };
+  const _mediaOpenOn = (m, i) => i < (MEDIA_EDITABLE_DAYS[m] || TODAY_EDITABLE_DAYS);
+  // その日（今日から i 日目）に、今日入れられるのに ✅ がない媒体があるか
+  const _dayHasOpenUnchecked = (w, ds, i, stores) => stores.some(m => _mediaOpenOn(m, i) && !(w.checks && w.checks[ds+'_'+m] && w.checks[ds+'_'+m].checked));
 
   async function _jumpToFirstEditable(name){
     const today = ymd(new Date());
@@ -2385,8 +2392,7 @@ const StaffApp = (function(){
       const sh=w.shifts&&w.shifts[ds];
       if((!sh||sh.start==null) && !isChangedToRest(w, ds)) continue;
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-      const allChecked=_dsStores.length>0&&_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
-      if(!allChecked){ targetDs=ds; break; }
+      if(_dsStores.length>0 && _dayHasOpenUnchecked(w, ds, i, _dsStores)){ targetDs=ds; break; }
     }
 
     // ★ 未チェック日が別の月にあれば、その月へ自動で切り替えてから光らせる
@@ -2452,8 +2458,7 @@ const StaffApp = (function(){
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
       if(w.status==='unsubmitted') continue;   // 未提出の週（キャストが書きかけ）は数えない
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-      const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
-      if(!allChecked) return true;
+      if(_dayHasOpenUnchecked(w, ds, i, _dsStores)) return true;
     }
     return false;
   }
@@ -2473,8 +2478,7 @@ const StaffApp = (function(){
       if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
       if(w.status==='unsubmitted') continue;   // 未提出の週（キャストが書きかけ）は数えない
       const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
-      const allChecked=_dsStores.every(m=>w.checks&&w.checks[ds+'_'+m]&&w.checks[ds+'_'+m].checked);
-      if(!allChecked) return ds;
+      if(_dayHasOpenUnchecked(w, ds, i, _dsStores)) return ds;
     }
     return null;
   }
@@ -3609,8 +3613,44 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     }
   }
   function setSearch(q){ searchQuery=(q||'').trim(); renderCastList(); }
+  // ★ 2026/11/25 店長：本日入力可能の子（受理ずみの週だけ）を「入れる待ち」にためて、まとめて入れる
+  function _todayOpenWeeks(){
+    const todayD=new Date(); todayD.setHours(0,0,0,0);
+    const out=[], notYet=[];
+    Store.getCastList().forEach(c=>{
+      if(!_hasUncheckedToday(c.name)) return;
+      const castStores=Store.getCastStores(c.name);
+      const dayStores=STORES.filter(m=>castStores.includes(m) && m!=='記録簿');   // 記録簿は受理したときに自動 ✅
+      const wks=new Set();
+      for(let i=0;i<TODAY_EDITABLE_DAYS;i++){
+        const d=new Date(todayD); d.setDate(todayD.getDate()+i);
+        const ds=ymd(d), wk=weekKeyOf(ds), w=Store.getWeek(c.name,wk);
+        if(!w||((!w.shifts||!w.shifts[ds]||w.shifts[ds].start==null) && !isChangedToRest(w, ds))) continue;
+        const _dsStores=isChangedToRest(w,ds)?dayStores.filter(m=>REST_DAY_STORES.includes(m)):dayStores;
+        if(!_dsStores.length || !_dayHasOpenUnchecked(w, ds, i, _dsStores)) continue;
+        if(['confirmed','change_confirmed'].includes(w.status)) wks.add(wk);
+        else if(w.status!=='unsubmitted' && !notYet.includes(c.name)) notYet.push(c.name);
+      }
+      wks.forEach(wk=>out.push({cast:c.name, wk}));
+    });
+    return { list: out, notYet };
+  }
+  async function bulkTodayHp(){
+    if(!window.HpSync || !HpSync.enqueue || !HpSync.runQueue){ toast('公式HPの自動反映が読み込めていません'); return; }
+    const { list, notYet } = _todayOpenWeeks();
+    const nyTxt = notYet.length ? `\n\n※ まだ受理していない週の子は入れません：${notYet.join('・')}` : '';
+    if(!list.length){ alert('まとめて入れられる子はいません（受理ずみの週で、今日入れられる日がある子だけ入れます）' + nyTxt); return; }
+    const names=[...new Set(list.map(x=>x.cast))];
+    if(!confirm(`本日入力可能の ${names.length}人（${list.length}週）を「入れる待ち」に入れて、まとめて公式HP・媒体に入れます。\n\n${names.join('・')}${nyTxt}`)) return;
+    let ok=false;
+    try{ ok = await HpSync.enqueue(list); }catch(e){}
+    if(!ok){ toast('「入れる待ち」に入れられませんでした'); return; }
+    await HpSync.runQueue(true);
+    renderFilterChips();
+  }
   function renderFilterChips(){
     const todayN = countFilter('today');
+    const bb=document.getElementById('todayBulkBtn'); if(bb) bb.style.display = todayN>0 ? '' : 'none';
     const waitN  = countFilter('waiting');
     const changeN= countFilter('change');
     document.querySelectorAll('.filter-chip').forEach(ch=>{
@@ -4385,6 +4425,7 @@ const STORE_ORDER=['記録簿','サクラムーン','ラナ鶯谷','ラナ錦糸
     applyStaffSelectColor, openCast3Weeks,
     confirmWeek, bulkConfirmAll, acceptChange, rejectChange, autoConfirmPastWeeks, openShiftEdit, showDayHistory,
     offerHpOne: (cast, wk)=>offerHp([{cast, wk, manual: true}]),
+    bulkTodayHp,
     acceptVacation, rejectVacation, cancelVacationDay, openVacAdd, removeVacation,
     sync, changeMonth, setFilter, setSearch, renderAll,
     toggleHideRest, saveStaffMemo,

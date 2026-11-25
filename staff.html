@@ -1544,7 +1544,10 @@ const Store = (function(){
      過去のマージ不具合で、消したはずの出勤が中身の無い箱として
      残ってしまったデータがある。読み書きの前に取り除く。 */
   function _cleanupWeek(w){
-    if(!w || !w.shifts) return w;
+    if(!w || typeof w !== 'object') return w;
+    // 2026/11/26：キャストのアプリだけで作った週（提出しただけ）は checks がない → 開くと描くところで止まって、下のキャスト（ら行など）が消えていた
+    if(!w.checks || typeof w.checks !== 'object') w.checks = {};
+    if(!w.shifts) return w;
     for(const ds in w.shifts){
       const sh = w.shifts[ds];
       if(!sh || sh.start == null || sh.end == null) delete w.shifts[ds];

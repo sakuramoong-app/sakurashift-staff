@@ -2139,6 +2139,28 @@ const StaffApp = (function(){
     }
   }
 
+  /* ★ 2026/11/26 店長：受信ボックスを2分ごとに読みなおす
+     （前は開いたときに1回読むだけ → 開いたままだと、あとから来た提出・変更申請が出なかった）
+     直している途中の週は上書きしない（LOAD_WEEKS が未保存の週をとばす）。
+     入力中（文字を打っている）・小窓が開いている・画面を見ていないときは、とばして次の回に */
+  setInterval(()=>{
+    try{
+      if(document.hidden) return;
+      if(!(Store.getCastList() || []).length) return;   // まだ開いている途中
+      const a = document.activeElement;
+      if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+      const popup = [...document.body.children].some(el=>{
+        if(el.id==='loadingOverlay') return false;
+        const cs = getComputedStyle(el);
+        if(cs.position!=='fixed' || cs.display==='none' || cs.visibility==='hidden') return false;
+        const r = el.getBoundingClientRect();
+        return r.width > innerWidth*0.8 && r.height > innerHeight*0.8;
+      });
+      if(popup) return;
+      _loadInboxInBackground();
+    }catch(e){ console.warn('受信ボックスの読みなおし', e); }
+  }, 120000);
+
   // 読み込み失敗時：再試行画面
   function _showRetryScreen(opts){
     const ov=document.getElementById('loadingOverlay');

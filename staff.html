@@ -1958,6 +1958,15 @@ const StaffGas = {
         if(resp && resp.conflict){
           // 他の人が先に更新していた → 両方の変更を残してマージし、もう一度保存する
           const merged = Store.mergeWeek3(base, data, resp.serverData);
+          /* ★ 2026/11/26：キャストの変更申請を消さない
+             内勤がチェック・直しをしている間にキャストが変更申請を出すと、両方が「状態」を変えたことになり、
+             内勤の状態（内勤入力中・確定）が勝って「変更申請中」が消えていた → 受信ボックスに出なかった（まほ・ゆりあ・みさき…）。
+             サーバーが「変更申請中」で、内勤が開いたときはまだ申請中でなかった → 申請中のまま残す（中身 changeRequest もサーバーのもの） */
+          const sv = resp.serverData || {};
+          if(sv.status === 'change_requested' && (!base || base.status !== 'change_requested') && !['change_inputting','change_confirmed'].includes(data.status)){
+            merged.status = 'change_requested';
+            if(sv.changeRequest) merged.changeRequest = sv.changeRequest;
+          }
           merged.updatedAt = new Date().toISOString();
           const resp2 = await this._post({
             action:'saveWeek', cast, wk,

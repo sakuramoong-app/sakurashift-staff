@@ -517,7 +517,81 @@
   setTimeout(refreshQueue, 3500);
   setInterval(() => { if(!queueRunning) refreshQueue(); }, 60000);   // ほかの内勤がためた分も出る
 
+  /* ============================================================
+     🔎 毎朝のシフトチェック（2026/11/29 店長）：朝7時からロボットが、受理ずみのシフト（今日〜13日先）と
+     公式HP・媒体の出勤を見くらべた結果（SQL 981・hp-shift-sync の audit_tick）。ちがうところを出す
+     ・「🌐 入れる」で、その子の週をいつもの小窓で入れなおす。入れたあとは「✅ そのあと入れました」になる
+     ============================================================ */
+  let audit = null;
+  async function refreshAudit(){
+    try{
+      const day = todayBiz(), db = ShiftDB.client;
+      const { data: run, error } = await db.from('shift_audit_runs').select('*').eq('run_date', day).maybeSingle();
+      if(error){ audit = null; paintAudit(); return; }   // SQL 981 がまだ
+      if(!run){ audit = { run: null, jobs: [] }; paintAudit(); return; }
+      const { data: jobs } = await db.from('shift_audit_jobs').select('id,kind,store,label,state,finished_at,result,error').eq('run_date', day).order('id');
+      const { data: logs } = await db.from('hp_sync_log').select('at,store_key,casts,ok').gte('at', run.created_at).eq('ok', true).limit(1000);
+      audit = { run, jobs: jobs || [], logs: logs || [] };
+      paintAudit();
+    }catch(e){}
+  }
+  // 結果 → キャストごとの「ちがうところ」と「読めなかったところ」。そのあと「🌐 入れる」で入った（hp_sync_log の ok）ものは fixed
+  function auditItems(a){
+    const byCast = new Map(), errs = [];
+    (a.jobs || []).forEach(j => {
+      const r = j.result || {}, key = j.kind === 'hp' ? j.store : j.kind + ':' + j.store;
+      if(j.state === 'error' && !(r.errors || []).length) errs.push({ cast: '', label: j.label, error: j.error || '読めませんでした' });
+      (r.errors || []).forEach(e => errs.push({ cast: e.cast, label: j.label, error: e.error }));
+      (r.issues || []).forEach(is => {
+        const fixed = (a.logs || []).some(l => l.store_key === key && String(l.at) > String(j.finished_at || '') && (l.casts || []).some(c => c && c.cast === is.cast));
+        if(!byCast.has(is.cast)) byCast.set(is.cast, []);
+        byCast.get(is.cast).push({ label: j.label, diffs: is.diffs || [], wk: is.wk || {}, fixed });
+      });
+    });
+    return { casts: [...byCast.entries()].map(([cast, list]) => ({ cast, list, fixed: list.every(x => x.fixed) })), errs };
+  }
+  function paintAudit(){
+    let box = document.getElementById('hpAudit');
+    const anchor = document.getElementById('hpQueue') || document.getElementById('hpAlert') || document.querySelector('.inbox-card');
+    if(!anchor) return;
+    if(!audit){ if(box) box.remove(); return; }
+    if(!box){ box = document.createElement('div'); box.id = 'hpAudit'; anchor.parentNode.insertBefore(box, anchor); }
+    const a = audit, jobs = a.jobs || [];
+    const nDone = jobs.filter(j => j.state === 'done' || j.state === 'error').length;
+    const running = !!(a.run && !a.run.finished_at);
+    const it = auditItems(a), open = it.casts.filter(c => !c.fixed);
+    const cell = z => !z ? '？' : z.on ? (z.start || '') + '〜' + (z.end || '') : 'お休み';
+    const color = !a.run || (running && !open.length) ? '#9DB7E8' : open.length ? '#F0A23B' : '#5BBF8E';
+    const bg = !a.run || (running && !open.length) ? '#F3F7FF' : open.length ? '#FFF8EC' : '#EEF9F3';
+    const head = !a.run ? '🔎 けさのシフトチェック：朝7時から、ロボットが公式HP・媒体を見くらべます'
+      : running ? `🔎 けさのシフトチェック：⏳ 調べています（${nDone}／${jobs.length}）${open.length ? '…いまのところ、ちがうところ ' + open.length + '人' : ''}`
+      : open.length ? `🔎 けさのシフトチェック：⚠️ シフトと公式HP・媒体がちがうところがあります（${open.length}人）`
+      : '🔎 けさのシフトチェック：✅ 全部シフトどおりでした';
+    const wkList = c => { const s = new Set(); c.list.forEach(x => x.diffs.forEach(d => { if(x.wk[d.date]) s.add(x.wk[d.date]); })); return [...s].sort(); };
+    const canFix = typeof StaffApp !== 'undefined' && StaffApp.offerHpOne;
+    box.innerHTML = `<div style="background:${bg};border:2.5px solid ${color};border-radius:16px;padding:10px 14px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="font-size:14.5px;font-weight:900;flex:1;min-width:200px">${esc(head)}</div>
+        ${a.run && !running ? `<button type="button" id="auditAgain" style="border:1.5px solid #ccc;border-radius:10px;padding:5px 10px;background:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px">🔄 もう一度しらべる</button>` : ''}</div>
+      ${a.run ? `<div style="font-size:11.5px;color:#7a8794;margin:2px 0 4px">受理ずみのシフト（今日〜13日先）と、公式HP・媒体の出勤を見くらべています（読むだけ。直すのは「🌐 入れる」で）${a.run.note ? '・' + esc(a.run.note) : ''}</div>` : ''}
+      ${it.casts.map(c => `<div class="au-cast" style="padding:6px 0;border-top:1px dashed ${color};font-size:13px;${c.fixed ? 'opacity:.55' : ''}">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:14px">${esc(c.cast)}</b>
+          ${c.fixed ? '<span style="color:#1f9d6b;font-weight:800">✅ そのあと入れました</span>' : canFix ? wkList(c).map(wk => `<button type="button" data-aufix="${esc(c.cast)}|${wk}" style="border:none;border-radius:10px;padding:5px 11px;background:#E5638C;color:#fff;font-weight:900;cursor:pointer;font-family:inherit;font-size:12.5px">🌐 入れる（${esc(md(wk))}〜の週）</button>`).join('') : ''}</div>
+        ${c.list.map(x => `<div style="margin:2px 0 0 10px;${x.fixed ? 'text-decoration:line-through;color:#999' : ''}">・${esc(x.label)}：${x.diffs.map(d => `${esc(md(d.date))} いま <b>${esc(cell(d.now))}</b> → シフト <b>${esc(cell(d.want))}</b>${d.note ? '（' + esc(d.note) + '）' : ''}`).join('、')}</div>`).join('')}
+      </div>`).join('')}
+      ${it.errs.length ? `<details style="margin-top:4px;font-size:12px;color:#8a5050"><summary style="cursor:pointer">読めなかったところ（${it.errs.length}）</summary>${it.errs.map(e => `<div>・${esc(e.label)}${e.cast ? '／' + esc(e.cast) : ''}：${esc(e.error)}</div>`).join('')}</details>` : ''}
+    </div>`;
+    box.querySelectorAll('[data-aufix]').forEach(b => b.onclick = () => { const [cast, wk] = b.dataset.aufix.split('|'); Promise.resolve(StaffApp.offerHpOne(cast, wk)).then(() => setTimeout(refreshAudit, 1500)); });
+    const ag = box.querySelector('#auditAgain'); if(ag) ag.onclick = async () => {
+      if(!confirm('もう一度、全員の公式HP・媒体を見くらべますか？（30分〜1時間かかります。朝7時より前はできません）')) return;
+      const { error } = await ShiftDB.client.rpc('shift_audit_restart');
+      if(error){ alert('できませんでした：' + (error.message || error)); return; }
+      audit = { run: null, jobs: [] }; paintAudit(); setTimeout(refreshAudit, 70000);
+    };
+  }
+  setTimeout(refreshAudit, 4000);
+  setInterval(refreshAudit, 180000);   // 3分ごと（調べている途中の進み具合・ほかの内勤が入れた結果も出る）
+
   // いま「入れる待ち」に人がいる・入れている途中・確認の小窓が開いている → 新しく受理した子は待ちにためる（2026/11/22 店長）
   const busy = () => queueRows.length > 0 || !!queueRunning || !!document.querySelector('.hp-modal');
-  window.HpSync = { offer, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue, busy };
+  window.HpSync = { offer, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue, busy, refreshAudit, auditItems, _setAudit: a => { audit = a; paintAudit(); } };
 })();

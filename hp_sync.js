@@ -487,6 +487,7 @@
     box.innerHTML = `<div style="background:${items.length ? '#FFF1F1' : '#EEF9F3'};border:2.5px solid ${items.length ? '#E5484D' : '#5BBF8E'};border-radius:16px;padding:10px 14px;margin-bottom:12px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div style="font-size:15px;font-weight:900;color:${items.length ? '#C62828' : '#1f7a52'};flex:1;min-width:200px">${items.length ? `⚠️ 公式HP・媒体でやること（${casts.length}人）` : '✅ 公式HP・媒体は全部シフトどおりです'}</div>
+        ${can && items.some(x => x.act === 'retry' && x.wk) ? btn('id="tdAll"', '🌐 全部まとめて入れる', true) : ''}
         ${auLine ? `<small style="color:#7a8794;font-weight:800">${auLine}</small>` : ''}
         ${a && a.run && !running ? btn('id="auditAgain"', '🔄 もう一度しらべる') : ''}
       </div>
@@ -513,6 +514,7 @@
         refreshAlerts();
       } else { dismiss(x.key); paintTodo(); }
     });
+    const all = box.querySelector('#tdAll'); if(all) all.onclick = () => fixAll(false);
     const ag = box.querySelector('#auditAgain'); if(ag) ag.onclick = async () => {
       if(!confirm('もう一度、全員の公式HP・媒体を見くらべますか？（30分〜1時間かかります。朝7時より前はできません）')) return;
       const { error } = await ShiftDB.client.rpc('shift_audit_restart');
@@ -644,7 +646,33 @@
   setTimeout(refreshAudit, 4000);
   setInterval(refreshAudit, 180000);   // 3分ごと（調べている途中の進み具合・ほかの内勤が入れた結果も出る）
 
+  /* ============================================================
+     🌐 ボタン1つで全部入れる（2026/11/29 店長）：「やること」の「もう一度入れる」の子・週を、入れる待ちにためて、まとめて入れる
+     ・記録簿の「📢 お知らせ」のボタン → サクラシフトが #hpfix で開く → 自動でこれが始まる（確認は1回だけ）
+     ・朝のチェックは、今日から入れられるようになった日（駅チカ・情報局など）も「入っていない」として見つけるので、それもここで入る
+     ============================================================ */
+  async function fixAll(fromLink){
+    await refreshAlerts(); await refreshAudit();
+    const seen = new Set(), list = [];
+    todoItems().filter(x => x.act === 'retry' && x.wk).forEach(x => { const k = x.cast + '|' + x.wk; if(!seen.has(k)){ seen.add(k); list.push({ cast: x.cast, wk: x.wk }); } });
+    if(!list.length){ if(fromLink) alert('入れるものはありませんでした ✨（公式HP・媒体はシフトどおりです）'); return; }
+    const names = [...new Set(list.map(x => x.cast))];
+    if(!confirm(`公式HP・媒体に入っていない ${names.length}人（${names.join('・')}）を、まとめて入れます。\n終わるまで、この画面を開いたままにしてください（1人1〜2分）。`)) return;
+    if(!(await enqueue(list))){ alert('入れる待ちにためられませんでした：' + (enqueue.lastError || '')); return; }
+    await runQueue(true);
+    await refreshAlerts(); setTimeout(refreshAudit, 1500);
+  }
+  // 記録簿から #hpfix で開いたとき：画面の準備ができたら始める
+  if(/hpfix/.test(location.hash + location.search)){
+    (async () => {
+      try{ history.replaceState(null, '', location.pathname); }catch(e){}
+      for(let i = 0; i < 60 && !(window.StaffApp && StaffApp.offerHpOne && HpSync.ctx && document.querySelector('.inbox-card')); i++) await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 2500));   // シフトを読み終わるのを待つ
+      fixAll(true);
+    })();
+  }
+
   // いま「入れる待ち」に人がいる・入れている途中・確認の小窓が開いている → 新しく受理した子は待ちにためる（2026/11/22 店長）
   const busy = () => queueRows.length > 0 || !!queueRunning || !!document.querySelector('.hp-modal');
-  window.HpSync = { offer, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue, busy, refreshAudit, auditItems, _setAudit: a => { audit = a; paintAudit(); } };
+  window.HpSync = { offer, fixAll, HP_STORES, refreshAlerts, enqueue, refreshQueue, runQueue, busy, refreshAudit, auditItems, _setAudit: a => { audit = a; paintAudit(); } };
 })();

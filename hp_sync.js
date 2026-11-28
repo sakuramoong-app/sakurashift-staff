@@ -298,7 +298,7 @@
         <table><tr><th>日</th><th>サクラシフト</th><th>${p.kind ? '今の媒体' : '今の公式HP'}</th><th>入れたあと</th><th></th></tr>
         ${p.rows.map(z => { const d = days.find(x => x.date === z.date) || {};
           return `<tr class="${z.change ? 'chg' : ''}"><td>${md(z.date)}</td><td>${d.off ? 'お休み' : hl(d.start) + '〜' + hl(d.end)}</td><td>${cell(z.now)}</td><td>${cell(z.next)}</td>
-          <td>${z.skip ? `<span class="hp-ng">${esc(z.skip)}</span>` : z.problem ? `<span class="hp-ng">⚠️ ${esc(z.problem)}</span>` : z.change ? '<b>変わる</b>' : 'そのまま'}</td></tr>`; }).join('')}</table>`;
+          <td>${z.skip ? (WAIT_RE.test(z.skip) ? `<span style="color:#8a97a3">⏳ まだ入れられない日（あとで）</span>` : `<span class="hp-ng">${esc(z.skip)}</span>`) : z.problem ? `<span class="hp-ng">⚠️ ${esc(z.problem)}</span>` : z.change ? '<b>変わる</b>' : 'そのまま'}</td></tr>`; }).join('')}</table>`;
     }).join('') + `<p class="sub" style="margin-top:6px">黄色の行が変わります。✅＝予（出勤予定）にチェック、⬜＝チェックなし</p>`;
     body.querySelectorAll('[data-pick]').forEach(b => b.onclick = async () => {
       const p = plan[+b.dataset.pick], r = body.querySelector(`input[name="pick${b.dataset.pick}"]:checked`);
@@ -370,7 +370,7 @@
       // 入れられない日：媒体の画面にまだない日（情報局は28日先まで）だけなら「近くなったらもう一度」、ほかの理由なら「手で入れて」
       const probNote = p => { const bad = p.rows.filter(z => z.problem || z.skip), wait = bad.filter(z => WAIT_RE.test(z.skip || ''));
         return wait.length === bad.length
-          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} は、まだ入れられない日です（画面にまだその日の欄がありません。口コミ情報局28日・風じゃ/デリじゃ14日・駅チカ7日・公式HPは5週ほど先まで）。近くなったら「本日入力可能」に出るので、そのとき「🌐 まだ入れていない分をまとめて入れる」で入れてください</span>`
+          ? `<br><span style="color:#8a97a3;font-weight:700">⏳ ${wait.map(z => md(z.date)).join('・')} はまだ入れられない日（近くなったら「本日入力可能」に出ます）</span>`
           : `<br><span class="hp-ng">⚠️ 入れられない日（${bad.map(z => md(z.date)).join('・')}）は、入力チェックをつけていません。手で入れてください</span>`; };
       body.innerHTML = res.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}">${x.ok ? '✅' : '❌'} ${esc(x.p.store || x.p.media)}：${esc(x.msg)}${x.checked ? `（入力チェック ${x.checked}日 ✅）` : ''}${x.probs ? probNote(x.p) : ''}</div>`).join('')
         + plan.filter(p => p.error).map(p => `<div class="hp-ng">⚠️ ${esc(p.disp || p.media)}：${esc(p.error)}</div>`).join('');
@@ -400,35 +400,125 @@
         const key = r.store_key + '|' + cast + '|' + (d0 ? mondayOf(d0) : '');
         if(seen.has(key)) return; seen.add(key);   // いちばん新しい記録だけ見る
         // 「出勤画面にない日（28日先まで）」だけの失敗は、日が近づけば入れられるので警告にしない（前のロボットの記録）
-        if(r.ok === false && !/出勤画面にない日です[^／]*28日先まで/.test(String(r.error_text || '')) ) alertRows.push(Object.assign({}, r, { cast, wk: d0 ? mondayOf(d0) : '' }));
+        if(r.ok === false && !rangeOnly(r)) alertRows.push(Object.assign({}, r, { cast, wk: d0 ? mondayOf(d0) : '' }));
       });
       paintAlerts();
     }catch(e){}
   }
-  function paintAlerts(){
-    let box = document.getElementById('hpAlert');
+  // 入れられる日の外（媒体のきまり）だけの失敗は、出さない（2026/11/29 店長「決まりきった事だからエラーにする必要がない」）
+  //   ・口コミ情報局 28日先まで（前のロボットの記録）
+  //   ・駅チカ：4日先からは保存しても入らない（11/28 の記録）→ 今のロボットは「まだ入れられない日」にしている
+  const addDays = (ds, n) => { const d = new Date(ds + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  function rangeOnly(r){
+    const e = String(r.error_text || '');
+    if(/出勤画面にない日です[^／]*28日先まで/.test(e)) return true;
+    if(/^ekichika:/.test(String(r.store_key || ''))){
+      const ds = [...new Set(e.match(/\d{4}-\d\d-\d\d/g) || [])], base = new Date(new Date(r.at).getTime() + 3 * 3600e3).toISOString().slice(0, 10);
+      return ds.length > 0 && ds.every(d => d >= addDays(base, 4));
+    }
+    return false;
+  }
+  // エラーを短く：なぜ（why）と、次にやること（act：retry＝もう一度入れる・report＝店長に報告・ok＝わかった）
+  function shortWhy(e){
+    e = String(e || '');
+    if(/ログインでき|認証エラー|login/i.test(e)) return { why: 'ログインできませんでした', act: 'retry' };
+    if(/5:50|6:30/.test(e)) return { why: '朝5:50〜6:30は入れられない時間でした', act: 'retry' };
+    if(/ダミー名が入っていない/.test(e)) return { why: 'キャスト管理にダミー名がありません', act: 'ok' };
+    if(/フォーム|形が変わ|門番|読めませんでした|parse/i.test(e)) return { why: 'ロボットが読めませんでした（媒体の画面が変わったかも）', act: 'report' };
+    if(/がいません|見つかりません/.test(e)) return { why: 'この子が媒体に見つかりませんでした（名前がちがうかも）', act: 'retry' };
+    if(/うまく入らなかった|『更新』|入らなかった/.test(e)) return { why: 'シフトが入りませんでした', act: 'retry' };
+    if(/failed to start|Failed to send|BOOT_ERROR|WORKER|503|546|返事がありません|timeout|時間切れ/i.test(e)) return { why: 'ロボットが動けませんでした（混んでいたかも）', act: 'retry' };
+    return { why: 'ロボットが読めませんでした（媒体の画面が変わったかも）', act: 'report' };
+  }
+  function paintAlerts(){ paintTodo(); }
+  /* ============================================================
+     ⚠️ やること（2026/11/29 店長）：入らなかったシフト（hp_sync_log）と、朝のチェックで見つけたものを、キャストごとに1つの枠に
+     行 ＝ 期間・媒体・短い理由・次に押すボタン
+     ============================================================ */
+  const DIS_KEY = 'hpTodoDismiss_v1';
+  const dismissed = () => { try{ return JSON.parse(localStorage.getItem(DIS_KEY) || '{}') || {}; }catch(e){ return {}; } };
+  const dismiss = k => { const m = dismissed(); m[k] = todayBiz(); Object.keys(m).forEach(x => { if(m[x] < addDays(todayBiz(), -3)) delete m[x]; }); try{ localStorage.setItem(DIS_KEY, JSON.stringify(m)); }catch(e){} };
+  function todoItems(){
+    const items = [];
+    const wkTxt = wk => { const ds = weekDates(wk); return md(ds[0]) + '〜' + md(ds[6]); };
+    alertRows.forEach((r, i) => { const s = shortWhy(r.error_text); items.push({ cast: r.cast || r.cast_name, wk: r.wk, period: r.wk ? wkTxt(r.wk) : '', media: r.store_label || r.store_key, why: s.why, act: s.act, src: 'log', i, title: r.error_text || '' }); });
+    if(audit && audit.run){
+      const it = auditItems(audit), dm = dismissed();
+      it.casts.forEach(c => c.list.forEach(x => {
+        if(x.fixed) return;
+        const wks = [...new Set(x.diffs.map(d => x.wk[d.date]).filter(Boolean))].sort();
+        const cell = z => !z ? '？' : z.on ? (z.start || '') + '〜' + (z.end || '') : 'お休み';
+        wks.forEach(wk => {
+          const ds = x.diffs.filter(d => x.wk[d.date] === wk);
+          items.push({ cast: c.cast, wk, period: ds.map(d => md(d.date)).join('・'), media: x.label, why: '朝のチェックで、入っていないシフトを見つけました', act: 'retry', src: 'audit',
+            title: ds.map(d => `${md(d.date)} いま ${cell(d.now)} → シフト ${cell(d.want)}`).join('\n') });
+        });
+      }));
+      it.errs.forEach(e => {
+        const s = shortWhy(e.error), key = todayBiz() + '|' + (e.cast || '') + '|' + e.label;
+        if(dm[key]) return;
+        items.push({ cast: e.cast || '（お店ぜんぶ）', wk: '', period: '朝のチェック', media: e.label, why: s.why, act: s.act === 'report' ? 'report' : 'ok', src: 'auerr', key, title: e.error || '' });
+      });
+    }
+    // 同じキャスト・同じ媒体・同じ理由・同じ期間は1つに
+    const seen = new Set();
+    return items.filter(x => { const k = [x.cast, x.media, x.why, x.period].join('|'); if(seen.has(k)) return false; seen.add(k); return true; });
+  }
+  function paintTodo(){
+    let box = document.getElementById('hpTodo');
     const anchor = document.querySelector('.inbox-card');
     if(!anchor) return;
-    if(!alertRows.length){ if(box) box.remove(); return; }
-    if(!box){ box = document.createElement('div'); box.id = 'hpAlert'; anchor.parentNode.insertBefore(box, anchor); }
-    const when = t => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
-    box.innerHTML = `<div style="background:#FFF1F1;border:2.5px solid #E5484D;border-radius:16px;padding:12px 14px;margin-bottom:12px">
-      <div style="font-size:15px;font-weight:900;color:#C62828;margin-bottom:6px">⚠️ 公式HP・媒体に入らなかったシフトがあります（${alertRows.length}件）</div>
-      <div style="font-size:12px;color:#8a5050;margin-bottom:8px">「🌐 もう一度入れる」で入れなおすか、管理画面で手で入れてから「✅ 手で入れた」を押してください。入れなおして成功すると、ここから消えます。</div>
-      ${alertRows.map((r, i) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px dashed #F3B7B9;font-size:13px">
-        <b>${esc(r.cast_name || r.cast)}</b><span>→ ${esc(r.store_label || r.store_key)}</span>
-        <span style="color:#8a97a3">${esc(when(r.at))}${r.wk ? '・' + esc(r.wk.slice(5).replace('-', '/')) + 'の週' : ''}${r.by_name ? '・' + esc(r.by_name) : ''}</span>
-        <span style="color:#C62828;flex-basis:100%">${esc(r.error_text || 'うまく入らなかった日があります')}</span>
-        ${r.wk && typeof StaffApp !== 'undefined' && StaffApp.offerHpOne ? `<button type="button" data-retry="${i}" style="border:none;border-radius:10px;padding:6px 12px;background:#E5638C;color:#fff;font-weight:900;cursor:pointer;font-family:inherit">🌐 もう一度入れる</button>` : ''}
-        <button type="button" data-manual="${i}" style="border:1.5px solid #ddd;border-radius:10px;padding:6px 12px;background:#fff;font-weight:900;cursor:pointer;font-family:inherit">✅ 手で入れた</button></div>`).join('')}</div>`;
-    box.querySelectorAll('[data-retry]').forEach(b => b.onclick = () => { const r = alertRows[+b.dataset.retry]; StaffApp.offerHpOne(r.cast, r.wk); });
-    box.querySelectorAll('[data-manual]').forEach(b => b.onclick = async () => {
-      const r = alertRows[+b.dataset.manual];
-      if(!confirm(`${r.cast_name || r.cast} → ${r.store_label || r.store_key}\n管理画面で手で入れましたか？（この警告を消します）`)) return;
+    ['hpAlert', 'hpAudit'].forEach(id => { const o = document.getElementById(id); if(o) o.remove(); });
+    const items = todoItems();
+    const a = audit, jobs = (a && a.jobs) || [];
+    const running = !!(a && a.run && !a.run.finished_at);
+    if(!items.length && !(a && a.run)){ if(box) box.remove(); return; }
+    if(!box){ box = document.createElement('div'); box.id = 'hpTodo'; anchor.parentNode.insertBefore(box, anchor); }
+    const nDone = jobs.filter(j => j.state === 'done' || j.state === 'error').length;
+    const auLine = !(a && a.run) ? '' : running ? `🔎 けさのチェック：⏳ 調べています（${nDone}／${jobs.length}）` : `🔎 けさのチェック：済み${a.run.note ? '（' + esc(a.run.note) + '）' : ''}`;
+    const casts = [...new Set(items.map(x => x.cast))];
+    const can = typeof StaffApp !== 'undefined' && StaffApp.offerHpOne;
+    const btn = (attr, txt, main) => `<button type="button" ${attr} style="border:${main ? 'none' : '1.5px solid #ddd'};border-radius:10px;padding:5px 11px;background:${main ? '#E5638C' : '#fff'};color:${main ? '#fff' : '#333'};font-weight:900;cursor:pointer;font-family:inherit;font-size:12.5px;white-space:nowrap">${txt}</button>`;
+    const acts = (x, n) => {
+      if(x.act === 'retry') return (x.wk && can ? btn(`data-tdretry="${n}"`, '🌐 もう一度入れる', true) : '') + (x.src === 'log' ? btn(`data-tdmanual="${n}"`, '✅ 手で入れた') : '');
+      if(x.act === 'report') return '<small style="color:#C62828;font-weight:800">スクショを撮って店長に報告してください</small>' + btn(`data-tddone="${n}"`, '✅ 報告した');
+      return btn(`data-tddone="${n}"`, '✅ わかった');
+    };
+    box.innerHTML = `<div style="background:${items.length ? '#FFF1F1' : '#EEF9F3'};border:2.5px solid ${items.length ? '#E5484D' : '#5BBF8E'};border-radius:16px;padding:10px 14px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:15px;font-weight:900;color:${items.length ? '#C62828' : '#1f7a52'};flex:1;min-width:200px">${items.length ? `⚠️ 公式HP・媒体でやること（${casts.length}人）` : '✅ 公式HP・媒体は全部シフトどおりです'}</div>
+        ${auLine ? `<small style="color:#7a8794;font-weight:800">${auLine}</small>` : ''}
+        ${a && a.run && !running ? btn('id="auditAgain"', '🔄 もう一度しらべる') : ''}
+      </div>
+      ${casts.map(c => `<div class="td-cast" style="border-top:1px dashed #F3B7B9;padding:6px 0 4px">
+        <div style="font-weight:900;font-size:14.5px;margin-bottom:2px">${esc(c)}</div>
+        ${items.map((x, n) => x.cast !== c ? '' : `<div class="td-row" title="${esc(x.title || '')}" style="display:grid;grid-template-columns:minmax(90px,max-content) minmax(110px,max-content) 1fr auto;gap:4px 10px;align-items:center;font-size:13px;padding:3px 0 3px 8px">
+          <span style="color:#6b7785">${esc(x.period)}</span><b>${esc(x.media)}</b><span style="color:#C62828;font-weight:800">${esc(x.why)}</span><span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;justify-content:flex-end">${acts(x, n)}</span></div>`).join('')}
+      </div>`).join('')}
+    </div>
+    <style>@media (max-width:640px){ #hpTodo .td-row{grid-template-columns:auto 1fr !important} #hpTodo .td-row > span:nth-child(3),#hpTodo .td-row > span:nth-child(4){grid-column:1 / -1} }</style>`;
+    box.querySelectorAll('[data-tdretry]').forEach(b => b.onclick = () => { const x = items[+b.dataset.tdretry]; Promise.resolve(StaffApp.offerHpOne(x.cast, x.wk)).then(() => setTimeout(() => { refreshAlerts(); refreshAudit(); }, 1500)); });
+    box.querySelectorAll('[data-tdmanual]').forEach(b => b.onclick = async () => {
+      const x = items[+b.dataset.tdmanual], r = alertRows[x.i];
+      if(!confirm(`${x.cast} → ${x.media}\n管理画面で手で入れましたか？（ここから消します）`)) return;
       const sel = document.getElementById('staffSelect');
       try{ await ShiftDB.client.from('hp_sync_log').insert({ store_key: r.store_key, store_label: r.store_label, by_name: (sel && sel.value) || '', cast_name: r.cast_name, casts: r.casts, ok: true, error_text: '手で入れた（記録だけ）' }); }catch(e){}
       refreshAlerts();
     });
+    box.querySelectorAll('[data-tddone]').forEach(b => b.onclick = async () => {
+      const x = items[+b.dataset.tddone];
+      if(x.src === 'log'){
+        const r = alertRows[x.i], sel = document.getElementById('staffSelect');
+        try{ await ShiftDB.client.from('hp_sync_log').insert({ store_key: r.store_key, store_label: r.store_label, by_name: (sel && sel.value) || '', cast_name: r.cast_name, casts: r.casts, ok: true, error_text: '報告した（記録だけ）' }); }catch(e){}
+        refreshAlerts();
+      } else { dismiss(x.key); paintTodo(); }
+    });
+    const ag = box.querySelector('#auditAgain'); if(ag) ag.onclick = async () => {
+      if(!confirm('もう一度、全員の公式HP・媒体を見くらべますか？（30分〜1時間かかります。朝7時より前はできません）')) return;
+      const { error } = await ShiftDB.client.rpc('shift_audit_restart');
+      if(error){ alert('できませんでした：' + (error.message || error)); return; }
+      audit = { run: null, jobs: [] }; paintTodo(); setTimeout(refreshAudit, 70000);
+    };
   }
   setTimeout(refreshAlerts, 3000);
   setInterval(refreshAlerts, 180000);   // 3分ごと（ほかの内勤が入れた結果も出る）
@@ -465,7 +555,7 @@
   }
   function paintQueue(){
     let box = document.getElementById('hpQueue');
-    const anchor = document.getElementById('hpAlert') || document.querySelector('.inbox-card');
+    const anchor = document.getElementById('hpTodo') || document.querySelector('.inbox-card');
     if(!anchor) return;
     if(!queueRows.length && !queueRunning && !queueLog.length){ if(box) box.remove(); return; }
     if(!box){ box = document.createElement('div'); box.id = 'hpQueue'; anchor.parentNode.insertBefore(box, anchor); }
@@ -480,7 +570,7 @@
       ${queueRows.map((r, i) => `<span style="display:inline-flex;gap:6px;align-items:center;background:#fff;border:1.5px solid #D9D1FF;border-radius:99px;padding:3px 6px 3px 12px;margin:2px 4px 2px 0;font-size:13px">
         <b>${esc(r.cast_name)}</b><small style="color:#8a97a3">${esc(wkTxt(r.wk))}</small>
         ${queueRunning ? '' : `<a href="javascript:void 0" data-qone="${i}" title="この子だけ、確認しながら入れる" style="text-decoration:none">🔍</a><a href="javascript:void 0" data-qdel="${i}" title="待ちから外す" style="text-decoration:none;color:#9C8B8F">✕</a>`}</span>`).join('')}
-      ${queueLog.length ? `<div style="margin-top:8px;border-top:1px dashed #D9D1FF;padding-top:6px;font-size:12.5px">${queueLog.map(x => `<div class="${x.ok ? 'hp-ok' : 'hp-ng'}" style="color:${x.ok ? '#1f9d6b' : '#d9534f'};font-weight:800">${x.ok ? '✅' : '⚠️'} ${esc(x.cast)}（${esc(wkTxt(x.wk))}）${x.ok ? '' : '：' + esc(x.text.filter(t => /⚠️|❌/.test(t)).join(' ／ ') || 'うまく入らなかったところがあります')}</div>`).join('')}
+      ${queueLog.length ? `<div style="margin-top:8px;border-top:1px dashed #D9D1FF;padding-top:6px;font-size:12.5px;color:#1f9d6b;font-weight:800">✅ ${queueLog.length}人 入れ終わりました${queueRunning ? '' : '（入らなかったところは、下の「⚠️ やること」に出ます）'} 
         ${queueRunning ? '' : `<a href="javascript:void 0" id="hpQueueClr" style="font-size:12px;color:#8a97a3">結果を消す</a>`}</div>` : ''}</div>`;
     const g = box.querySelector('#hpQueueGo'); if(g) g.onclick = runQueue;
     const cl = box.querySelector('#hpQueueClr'); if(cl) cl.onclick = () => { queueLog = []; paintQueue(); };
@@ -550,44 +640,7 @@
     });
     return { casts: [...byCast.entries()].map(([cast, list]) => ({ cast, list, fixed: list.every(x => x.fixed) })), errs };
   }
-  function paintAudit(){
-    let box = document.getElementById('hpAudit');
-    const anchor = document.getElementById('hpQueue') || document.getElementById('hpAlert') || document.querySelector('.inbox-card');
-    if(!anchor) return;
-    if(!audit){ if(box) box.remove(); return; }
-    if(!box){ box = document.createElement('div'); box.id = 'hpAudit'; anchor.parentNode.insertBefore(box, anchor); }
-    const a = audit, jobs = a.jobs || [];
-    const nDone = jobs.filter(j => j.state === 'done' || j.state === 'error').length;
-    const running = !!(a.run && !a.run.finished_at);
-    const it = auditItems(a), open = it.casts.filter(c => !c.fixed);
-    const cell = z => !z ? '？' : z.on ? (z.start || '') + '〜' + (z.end || '') : 'お休み';
-    const color = !a.run || (running && !open.length) ? '#9DB7E8' : open.length ? '#F0A23B' : '#5BBF8E';
-    const bg = !a.run || (running && !open.length) ? '#F3F7FF' : open.length ? '#FFF8EC' : '#EEF9F3';
-    const head = !a.run ? '🔎 けさのシフトチェック：朝7時から、ロボットが公式HP・媒体を見くらべます'
-      : running ? `🔎 けさのシフトチェック：⏳ 調べています（${nDone}／${jobs.length}）${open.length ? '…いまのところ、ちがうところ ' + open.length + '人' : ''}`
-      : open.length ? `🔎 けさのシフトチェック：⚠️ シフトと公式HP・媒体がちがうところがあります（${open.length}人）`
-      : '🔎 けさのシフトチェック：✅ 全部シフトどおりでした';
-    const wkList = c => { const s = new Set(); c.list.forEach(x => x.diffs.forEach(d => { if(x.wk[d.date]) s.add(x.wk[d.date]); })); return [...s].sort(); };
-    const canFix = typeof StaffApp !== 'undefined' && StaffApp.offerHpOne;
-    box.innerHTML = `<div style="background:${bg};border:2.5px solid ${color};border-radius:16px;padding:10px 14px;margin-bottom:12px">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="font-size:14.5px;font-weight:900;flex:1;min-width:200px">${esc(head)}</div>
-        ${a.run && !running ? `<button type="button" id="auditAgain" style="border:1.5px solid #ccc;border-radius:10px;padding:5px 10px;background:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px">🔄 もう一度しらべる</button>` : ''}</div>
-      ${a.run ? `<div style="font-size:11.5px;color:#7a8794;margin:2px 0 4px">受理ずみのシフト（今日〜13日先）と、公式HP・媒体の出勤を見くらべています（読むだけ。直すのは「🌐 入れる」で）${a.run.note ? '・' + esc(a.run.note) : ''}</div>` : ''}
-      ${it.casts.map(c => `<div class="au-cast" style="padding:6px 0;border-top:1px dashed ${color};font-size:13px;${c.fixed ? 'opacity:.55' : ''}">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:14px">${esc(c.cast)}</b>
-          ${c.fixed ? '<span style="color:#1f9d6b;font-weight:800">✅ そのあと入れました</span>' : canFix ? wkList(c).map(wk => `<button type="button" data-aufix="${esc(c.cast)}|${wk}" style="border:none;border-radius:10px;padding:5px 11px;background:#E5638C;color:#fff;font-weight:900;cursor:pointer;font-family:inherit;font-size:12.5px">🌐 入れる（${esc(md(wk))}〜の週）</button>`).join('') : ''}</div>
-        ${c.list.map(x => `<div style="margin:2px 0 0 10px;${x.fixed ? 'text-decoration:line-through;color:#999' : ''}">・${esc(x.label)}：${x.diffs.map(d => `${esc(md(d.date))} いま <b>${esc(cell(d.now))}</b> → シフト <b>${esc(cell(d.want))}</b>${d.note ? '（' + esc(d.note) + '）' : ''}`).join('、')}</div>`).join('')}
-      </div>`).join('')}
-      ${it.errs.length ? `<details style="margin-top:4px;font-size:12px;color:#8a5050"><summary style="cursor:pointer">読めなかったところ（${it.errs.length}）</summary>${it.errs.map(e => `<div>・${esc(e.label)}${e.cast ? '／' + esc(e.cast) : ''}：${esc(e.error)}</div>`).join('')}</details>` : ''}
-    </div>`;
-    box.querySelectorAll('[data-aufix]').forEach(b => b.onclick = () => { const [cast, wk] = b.dataset.aufix.split('|'); Promise.resolve(StaffApp.offerHpOne(cast, wk)).then(() => setTimeout(refreshAudit, 1500)); });
-    const ag = box.querySelector('#auditAgain'); if(ag) ag.onclick = async () => {
-      if(!confirm('もう一度、全員の公式HP・媒体を見くらべますか？（30分〜1時間かかります。朝7時より前はできません）')) return;
-      const { error } = await ShiftDB.client.rpc('shift_audit_restart');
-      if(error){ alert('できませんでした：' + (error.message || error)); return; }
-      audit = { run: null, jobs: [] }; paintAudit(); setTimeout(refreshAudit, 70000);
-    };
-  }
+  function paintAudit(){ paintTodo(); }
   setTimeout(refreshAudit, 4000);
   setInterval(refreshAudit, 180000);   // 3分ごと（調べている途中の進み具合・ほかの内勤が入れた結果も出る）
 
